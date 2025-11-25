@@ -1,0 +1,70 @@
+📁 Caloken/
+├─ CalokenApp.swift
+├─ ContentView.swift                    # メインのタブバー
+│
+├─ 📁 Views/
+│   │
+│   ├─ 📁 Onboarding/                  # オンボーディング
+│   │   ├─ S1_WelcomeView.swift        # ユーザー登録
+│   │   ├─ S2_UserInfoView.swift       # 性別選択
+│   │   ├─ S3_GoalView.swift           # アプリの目的
+│   │   ├─ S4_TargetView.swift         # 目標情報
+│   │   ├─ S5_ReferralView.swift       # 元情報
+│   │   ├─ S6_NotificationView.swift   # 通知許可
+│   │   ├─ S20_PlanCreationView.swift  # プラン作成
+│   │   └─ S23_AuthView.swift          # 認証
+│   │
+│   ├─ 📁 Home/                        # ホーム画面
+│   │   ├─ S24_HomeView.swift          # ホーム画面1（メイン）
+│   │   ├─ S25_HomeView2.swift         # ホーム画面2（スワイプ）
+│   │   ├─ Components/
+│   │   │   ├─ WeekCalendarView.swift
+│   │   │   ├─ MetricsTabView.swift
+│   │   │   ├─ CalorieCard.swift
+│   │   │   ├─ ActivityCard.swift
+│   │   │   └─ RecentLogsCard.swift
+│   │   └─ S26_NewsView.swift          # ニュース画面
+│   │
+│   ├─ 📁 Progress/                    # 進捗画面
+│   │   └─ S38_ProgressView.swift      # 進捗表示
+│   │
+│   ├─ 📁 Record/                      # 記録画面
+│   │   ├─ S39_RecordMenuView.swift    # 記録メニュー
+│   │   ├─ 📁 Exercise/
+│   │   │   ├─ S40_ExerciseMenuView.swift
+│   │   │   ├─ S41_RunningView.swift
+│   │   │   ├─ S42_AnaerobicView.swift
+│   │   │   └─ S43_ExerciseNoteView.swift
+│   │   ├─ 📁 Meal/
+│   │   │   ├─ S45_CameraView.swift
+│   │   │   ├─ S45_1_AnalyzingView.swift
+│   │   │   ├─ S46_MealDetailView.swift
+│   │   │   ├─ S47_ShareMealView.swift
+│   │   │   ├─ S48_ManualRecordView.swift
+│   │   │   └─ S50_SavedMealView.swift
+│   │   └─ S49_WeightRecordView.swift  # 体重記録
+│   │
+│   └─ 📁 Settings/                    # 設定画面
+│       ├─ S27_1_SettingsView.swift    # 設定メイン
+│       ├─ S27_2_ProfileEditView.swift # プロフィール編集
+│       ├─ S27_3_NutritionGoalView.swift # 栄養素目標
+│       ├─ S27_4_FeatureRequestView.swift # 機能リクエスト
+│       └─ S27_8_DeleteAccountView.swift # アカウント削除
+│
+├─ 📁 Components/                      # 共通コンポーネント
+│   ├─ NutrientSemiCircle.swift
+│   ├─ SemiCircle.swift
+│   └─ CustomButton.swift
+│
+├─ 📁 Models/                          # データモデル
+│   ├─ User.swift
+│   ├─ Meal.swift
+│   ├─ Exercise.swift
+│   └─ NutritionData.swift
+│
+├─ 📁 ViewModels/                      # 状態管理
+│   ├─ HomeViewModel.swift
+│   ├─ ProgressViewModel.swift
+│   └─ RecordViewModel.swift
+│
+└─ Colors.swift
