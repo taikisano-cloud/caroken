@@ -640,41 +640,84 @@ struct HealthKitFeatureRow: View {
 }
 
 struct PlanCreationAnimationView: View {
-    @Binding var progress: Double; @Binding var phase: PlanCreationPhase
+    @Binding var progress: Double
+    @Binding var phase: PlanCreationPhase
+    
     var body: some View {
         VStack(spacing: 24) {
             Spacer().frame(height: 40)
-            HStack(spacing: 20) { Text("🥛").font(.system(size: 50)); Text("📖").font(.system(size: 60)); Text("🍅").font(.system(size: 50)) }.padding(.bottom, 20)
-            Text("\(Int(progress * 100))%").font(.system(size: 48, weight: .bold))
-            Text("プランを準備しています").font(.system(size: 24, weight: .bold))
+            HStack(spacing: 20) {
+                Text("🥛").font(.system(size: 50))
+                Text("📖").font(.system(size: 60))
+                Text("🍅").font(.system(size: 50))
+            }
+            .padding(.bottom, 20)
+            
+            Text("\(Int(progress * 100))%")
+                .font(.system(size: 48, weight: .bold))
+            
+            Text("プランを準備しています")
+                .font(.system(size: 24, weight: .bold))
+            
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.2)).frame(height: 12)
-                    RoundedRectangle(cornerRadius: 8).fill(LinearGradient(colors: [Color.orange, Color.orange.opacity(0.7)], startPoint: .leading, endPoint: .trailing)).frame(width: geometry.size.width * progress, height: 12).animation(.easeInOut(duration: 0.3), value: progress)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 12)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(LinearGradient(colors: [Color.orange, Color.orange.opacity(0.7)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geometry.size.width * progress, height: 12)
+                        .animation(.easeInOut(duration: 0.3), value: progress)
                 }
-            }.frame(height: 12).padding(.horizontal, 40)
-            Text("栄養プランを作成中...").font(.system(size: 16)).foregroundColor(.gray)
+            }
+            .frame(height: 12)
+            .padding(.horizontal, 40)
+            
+            Text("栄養プランを作成中...")
+                .font(.system(size: 16))
+                .foregroundColor(.gray)
+            
+            // プランチェックリスト（ダーク/ライトモード対応）
             VStack(alignment: .leading, spacing: 12) {
-                Text("あなたのプラン").font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
+                Text("あなたのプラン")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+                
                 PlanCheckItem(title: "カロリー", isComplete: phase >= .calories)
                 PlanCheckItem(title: "炭水化物", isComplete: phase >= .carbs)
                 PlanCheckItem(title: "たんぱく質", isComplete: phase >= .protein)
                 PlanCheckItem(title: "脂質", isComplete: phase >= .fat)
                 PlanCheckItem(title: "ヘルスコア", isComplete: phase >= .healthScore)
-            }.padding(20).background(Color.black).cornerRadius(16).padding(.horizontal, 40).padding(.top, 20)
+            }
+            .padding(20)
+            .background(Color(UIColor.systemGray6))
+            .cornerRadius(16)
+            .padding(.horizontal, 40)
+            .padding(.top, 20)
+            
             Spacer()
         }
     }
 }
 
 struct PlanCheckItem: View {
-    let title: String; let isComplete: Bool
+    let title: String
+    let isComplete: Bool
+    
     var body: some View {
         HStack {
-            Text("・\(title)").font(.system(size: 15)).foregroundColor(.white)
+            Text("・\(title)")
+                .font(.system(size: 15))
+                .foregroundColor(.primary)
             Spacer()
-            if isComplete { Image(systemName: "checkmark.circle.fill").foregroundColor(.green) }
-            else { ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .gray)).scaleEffect(0.8) }
+            if isComplete {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+            } else {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                    .scaleEffect(0.8)
+            }
         }
     }
 }
@@ -706,12 +749,12 @@ struct PlanDetailView: View {
                         Text("1日の栄養バランス目標").font(.system(size: 14)).foregroundColor(.gray)
                     }
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        NutrientCard(emoji: "🍚", label: "炭水化物", value: "\(carbs)g", color: .orange)
-                        NutrientCard(emoji: "🥩", label: "たんぱく質", value: "\(protein)g", color: .red)
-                        NutrientCard(emoji: "🥑", label: "脂質", value: "\(fat)g", color: .green)
-                        NutrientCard(emoji: "🌾", label: "食物繊維", value: "\(fiber)g", color: .brown)
-                        NutrientCard(emoji: "🍬", label: "糖分", value: "\(sugar)g", color: .pink)
-                        NutrientCard(emoji: "🧂", label: "ナトリウム", value: "\(sodium)mg", color: .gray)
+                        OnboardingNutrientCard(emoji: "🍚", label: "炭水化物", value: "\(carbs)g", color: .orange)
+                        OnboardingNutrientCard(emoji: "🥩", label: "たんぱく質", value: "\(protein)g", color: .red)
+                        OnboardingNutrientCard(emoji: "🥑", label: "脂質", value: "\(fat)g", color: .green)
+                        OnboardingNutrientCard(emoji: "🌾", label: "食物繊維", value: "\(fiber)g", color: .brown)
+                        OnboardingNutrientCard(emoji: "🍬", label: "糖分", value: "\(sugar)g", color: .pink)
+                        OnboardingNutrientCard(emoji: "🧂", label: "ナトリウム", value: "\(sodium)mg", color: .gray)
                     }
                 }.padding(20).background(Color(UIColor.systemGray6)).cornerRadius(16).padding(.horizontal, 16)
                 
@@ -731,7 +774,7 @@ struct PlanDetailView: View {
     }
 }
 
-struct NutrientCard: View {
+struct OnboardingNutrientCard: View {
     let emoji: String; let label: String; let value: String; let color: Color
     var body: some View {
         VStack(spacing: 6) {

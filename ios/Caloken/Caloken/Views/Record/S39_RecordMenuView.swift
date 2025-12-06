@@ -102,10 +102,11 @@ struct RecordMenuButton: View {
                     .clipShape(Circle())
                 
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(Color(UIColor.label))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .frame(width: 70)
+                    .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
             }
         }
         .buttonStyle(.plain)

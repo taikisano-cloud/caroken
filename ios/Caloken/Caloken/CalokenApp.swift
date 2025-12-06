@@ -3,13 +3,22 @@ import SwiftUI
 @main
 struct CalokenApp: App {
     @State private var isLoading: Bool = true
+    @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
     
     var body: some Scene {
         WindowGroup {
             ZStack {
-                // メインコンテンツ（既存のContentViewを使用）
-                ContentView()
-                    .opacity(isLoading ? 0 : 1)
+                // メインコンテンツ（ログイン状態で切り替え）
+                Group {
+                    if isLoggedIn {
+                        // ログイン済み → メイン画面
+                        ContentView()
+                    } else {
+                        // 未ログイン → S1（オンボーディング/ログイン選択画面）
+                        S1_OnboardingStartView()
+                    }
+                }
+                .opacity(isLoading ? 0 : 1)
                 
                 // ローディング画面
                 if isLoading {
@@ -17,8 +26,8 @@ struct CalokenApp: App {
                         .transition(.opacity)
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: isLoggedIn)
             .onAppear {
-                // 初期化処理（データ読み込みなど）
                 initializeApp()
             }
         }

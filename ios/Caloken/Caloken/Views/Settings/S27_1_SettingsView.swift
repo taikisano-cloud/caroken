@@ -1,12 +1,13 @@
 import SwiftUI
 
 struct S27_1_SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("isLoggedIn") private var isLoggedIn: Bool = true
     @StateObject private var profileManager = UserProfileManager.shared
     @StateObject private var weightLogsManager = WeightLogsManager.shared
     
     @State private var isHealthSyncEnabled: Bool = true
     @State private var showSignOutAlert: Bool = false
-    @State private var navigateToOnboarding: Bool = false
     
     // 性別表示テキスト
     private var genderDisplayText: String {
@@ -19,34 +20,33 @@ struct S27_1_SettingsView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 12) {
-                    // 身体情報セクション
-                    VStack(spacing: 0) {
-                        NavigationLink {
-                            S27_2_ProfileEditView()
-                        } label: {
-                            ProfileRow(label: "身長", value: "\(profileManager.height) cm")
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_2_ProfileEditView()
-                        } label: {
-                            ProfileRow(label: "体重", value: String(format: "%.1f kg", weightLogsManager.currentWeight))
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_2_ProfileEditView()
-                        } label: {
-                            ProfileRow(label: "性別", value: genderDisplayText)
-                        }
-                        
-                        Divider().padding(.leading, 16)
+        ScrollView {
+            VStack(spacing: 12) {
+                // 身体情報セクション
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        S27_2_ProfileEditView()
+                    } label: {
+                        ProfileRow(label: "身長", value: "\(profileManager.height) cm")
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_2_ProfileEditView()
+                    } label: {
+                        ProfileRow(label: "体重", value: String(format: "%.1f kg", weightLogsManager.currentWeight))
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_2_ProfileEditView()
+                    } label: {
+                        ProfileRow(label: "性別", value: genderDisplayText)
+                    }
+                    
+                    Divider().padding(.leading, 16)
                         
                         NavigationLink {
                             S27_2_ProfileEditView()
@@ -174,7 +174,10 @@ struct S27_1_SettingsView: View {
                         
                         NavigationLink {
                             S27_9_DeleteAccountView(onAccountDeleted: {
-                                navigateToOnboarding = true
+                                // アカウント削除完了 → S1に戻る
+                                withAnimation {
+                                    isLoggedIn = false
+                                }
                             })
                         } label: {
                             HStack {
@@ -201,33 +204,44 @@ struct S27_1_SettingsView: View {
                         .padding(.bottom, 32)
                 }
                 .padding(.top, 16)
-            }
-            .background(Color(UIColor.systemBackground))
-            .navigationTitle("設定")
-            .navigationBarTitleDisplayMode(.inline)
-            .alert("サインアウト", isPresented: $showSignOutAlert) {
-                Button("キャンセル", role: .cancel) {}
-                Button("サインアウト", role: .destructive) {
-                    signOut()
+        }
+        .background(Color(UIColor.systemBackground))
+        .navigationTitle("設定")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.primary)
                 }
-            } message: {
-                Text("本当にサインアウトしますか？")
-            }
-            .fullScreenCover(isPresented: $navigateToOnboarding) {
-                S1_OnboardingStartView()
             }
         }
+        .alert("サインアウト", isPresented: $showSignOutAlert) {
+            Button("キャンセル", role: .cancel) {}
+            Button("サインアウト", role: .destructive) {
+                signOut()
+            }
+        } message: {
+            Text("本当にサインアウトしますか？")
+        }
+        .enableSwipeBack()
     }
     
     private func signOut() {
-        print("Signing out...")
-        navigateToOnboarding = true
+        // @AppStorage を更新 → CalokenApp.swift でS1に切り替わる
+        withAnimation {
+            isLoggedIn = false
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M月 d, yyyy"
+        formatter.dateFormat = "M月 d日, yyyy"
         return formatter.string(from: date)
     }
 }

@@ -5,12 +5,14 @@ struct S51_PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
+    // ログイン状態を@AppStorageで管理
+    @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
+    
     @State private var showAllPlans: Bool = false
     @State private var selectedPlan: PaywallSubscriptionPlan = .yearly
     @State private var isLoading: Bool = false
     @State private var navigateToTerms: Bool = false
     @State private var navigateToPrivacy: Bool = false
-    @State private var navigateToHome: Bool = false
     @State private var showPurchaseError: Bool = false
     
     var body: some View {
@@ -139,20 +141,29 @@ struct S51_PaywallView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .navigationDestination(isPresented: $navigateToTerms) {
-            S27_7_TermsOfServiceView()
+        .sheet(isPresented: $navigateToTerms) {
+            NavigationStack {
+                S27_7_TermsOfServiceView()
+            }
         }
-        .navigationDestination(isPresented: $navigateToPrivacy) {
-            S27_8_PrivacyPolicyView()
-        }
-        .navigationDestination(isPresented: $navigateToHome) {
-            ContentView()
-                .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $navigateToPrivacy) {
+            NavigationStack {
+                S27_8_PrivacyPolicyView()
+            }
         }
         .alert("購入エラー", isPresented: $showPurchaseError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("購入処理中にエラーが発生しました。もう一度お試しください。")
+        }
+    }
+    
+    // MARK: - 購入完了処理
+    private func completePurchase() {
+        // @AppStorage を更新 → CalokenApp.swift で ContentView に自動切り替え
+        // NavigationStack遷移ではないので、戻るボタンでログイン画面に戻ることはない
+        withAnimation {
+            isLoggedIn = true
         }
     }
     
@@ -173,7 +184,7 @@ struct S51_PaywallView: View {
                             switch verification {
                             case .verified:
                                 isLoading = false
-                                navigateToHome = true
+                                completePurchase()
                             case .unverified:
                                 isLoading = false
                                 showPurchaseError = true
@@ -190,14 +201,14 @@ struct S51_PaywallView: View {
                     await MainActor.run {
                         print("⚠️ Product not found. This is normal during development.")
                         isLoading = false
-                        navigateToHome = true
+                        completePurchase()
                     }
                 }
             } catch {
                 await MainActor.run {
                     print("Purchase error: \(error)")
                     isLoading = false
-                    navigateToHome = true
+                    completePurchase()
                 }
             }
         }
@@ -214,7 +225,7 @@ struct S51_PaywallView: View {
                     if case .verified = result {
                         await MainActor.run {
                             isLoading = false
-                            navigateToHome = true
+                            completePurchase()
                         }
                         return
                     }
@@ -222,7 +233,7 @@ struct S51_PaywallView: View {
                 
                 await MainActor.run {
                     isLoading = false
-                    navigateToHome = true
+                    completePurchase()
                 }
             } catch {
                 await MainActor.run {

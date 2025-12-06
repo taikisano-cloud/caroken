@@ -25,7 +25,12 @@ struct S43_ExerciseManualEntryView: View {
                             .background(Color(UIColor.secondarySystemGroupedBackground))
                             .cornerRadius(12)
                             .focused($isDescriptionFocused)
-                            .submitLabel(.done)
+                            .submitLabel(.send)
+                            .onSubmit {
+                                if !exerciseDescription.isEmpty {
+                                    saveExercise()
+                                }
+                            }
                     }
                     
                     VStack(alignment: .leading, spacing: 12) {
@@ -49,11 +54,27 @@ struct S43_ExerciseManualEntryView: View {
                             .cornerRadius(12)
                         }
                     }
+                    
+                    // ヒント
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 16))
+                        
+                        Text("運動の種類と時間を細かく入力するとより正確にカロリーを計算できます")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.yellow.opacity(0.15))
+                    .cornerRadius(12)
                 }
                 .padding(20)
             }
             
-            VStack {
+            // キーボード上のボタンエリア（角丸）
+            VStack(spacing: 0) {
                 Button(action: { saveExercise() }) {
                     Text("記録する")
                         .font(.system(size: 17, weight: .semibold))
@@ -65,10 +86,12 @@ struct S43_ExerciseManualEntryView: View {
                 }
                 .disabled(exerciseDescription.isEmpty)
                 .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.vertical, 16)
             }
-            .background(Color(UIColor.systemBackground))
-            .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: -5)
+            .background(
+                RoundedCornerShape(corners: [.topLeft, .topRight], radius: 20)
+                    .fill(Color(UIColor.secondarySystemGroupedBackground))
+            )
         }
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("その他の運動")
@@ -80,15 +103,6 @@ struct S43_ExerciseManualEntryView: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.primary)
-                }
-            }
-            
-            ToolbarItem(placement: .keyboard) {
-                HStack {
-                    Spacer()
-                    Button("完了") {
-                        isDescriptionFocused = false
-                    }
                 }
             }
         }
@@ -160,5 +174,20 @@ struct ExerciseDurationPickerSheet: View {
         .onAppear {
             tempDuration = selectedDuration
         }
+    }
+}
+
+// MARK: - 上だけ角丸のShape
+private struct RoundedCornerShape: Shape {
+    var corners: UIRectCorner
+    var radius: CGFloat
+    
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
     }
 }

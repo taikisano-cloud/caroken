@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - 最近のログカード
 struct RecentLogsCard: View {
@@ -93,6 +94,10 @@ struct CompactMealLogCard: View {
     @State private var offset: CGFloat = 0
     @State private var showDetail = false
     @State private var rotation: Double = 0
+    @State private var hasTimedOut: Bool = false
+    
+    // タイムアウトチェック用タイマー
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -115,7 +120,7 @@ struct CompactMealLogCard: View {
             HStack(spacing: 12) {
                 // 左側：画像/アイコン（丸形）
                 ZStack {
-                    if log.isAnalyzing {
+                    if log.isAnalyzing && !hasTimedOut && !log.isAnalyzingError {
                         // 分析中：ぐるぐるスピナー
                         Circle()
                             .fill(Color(UIColor.systemGray5))
@@ -135,6 +140,15 @@ struct CompactMealLogCard: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 20))
                             .foregroundColor(.orange)
+                    } else if hasTimedOut || log.isAnalyzingError {
+                        // タイムアウト/エラー：赤いエラーアイコン
+                        Circle()
+                            .fill(Color.red.opacity(0.15))
+                            .frame(width: 60, height: 60)
+                        
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.red)
                     } else if let image = log.image {
                         Image(uiImage: image)
                             .resizable()
@@ -156,10 +170,17 @@ struct CompactMealLogCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // 名前と時間
                     HStack {
-                        Text(log.isAnalyzing ? "分析中..." : log.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(log.isAnalyzing ? .secondary : .primary)
-                            .lineLimit(1)
+                        if hasTimedOut || log.isAnalyzingError {
+                            Text("分析エラー")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.red)
+                                .lineLimit(1)
+                        } else {
+                            Text(log.isAnalyzing ? "分析中..." : log.name)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(log.isAnalyzing ? .secondary : .primary)
+                                .lineLimit(1)
+                        }
                         
                         Spacer()
                         
@@ -172,7 +193,13 @@ struct CompactMealLogCard: View {
                             .cornerRadius(8)
                     }
                     
-                    if log.isAnalyzing {
+                    if hasTimedOut || log.isAnalyzingError {
+                        // タイムアウト/エラーメッセージ
+                        Text("分析がタイムアウトしました。削除してやり直してください。")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red)
+                            .lineLimit(2)
+                    } else if log.isAnalyzing {
                         // 分析中メッセージ
                         Text("AIがカロリーを計算しています...")
                             .font(.system(size: 13))
@@ -198,10 +225,19 @@ struct CompactMealLogCard: View {
                 }
             }
             .padding(12)
-            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .background(hasTimedOut || log.isAnalyzingError ? Color.red.opacity(0.05) : Color(UIColor.secondarySystemGroupedBackground))
             .cornerRadius(16)
             .offset(x: offset)
             .onTapGesture {
+                // 分析中またはエラー時はタップで削除確認
+                if hasTimedOut || log.isAnalyzingError {
+                    // エラー時は左にスワイプして削除を促す
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        offset = -80
+                    }
+                    return
+                }
+                
                 // 分析中はタップ無効
                 guard !log.isAnalyzing else { return }
                 
@@ -216,8 +252,8 @@ struct CompactMealLogCard: View {
             .gesture(
                 DragGesture(minimumDistance: 20, coordinateSpace: .local)
                     .onChanged { value in
-                        // 分析中はスワイプ無効
-                        guard !log.isAnalyzing else { return }
+                        // 分析中（エラーなし）はスワイプ無効
+                        guard !log.isAnalyzing || hasTimedOut || log.isAnalyzingError else { return }
                         
                         let translation = value.translation.width
                         let verticalMovement = abs(value.translation.height)
@@ -232,7 +268,7 @@ struct CompactMealLogCard: View {
                         }
                     }
                     .onEnded { value in
-                        guard !log.isAnalyzing else { return }
+                        guard !log.isAnalyzing || hasTimedOut || log.isAnalyzingError else { return }
                         
                         let velocity = value.predictedEndTranslation.width
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -271,6 +307,16 @@ struct CompactMealLogCard: View {
                 isFromLog: true
             )
         }
+        .onReceive(timer) { _ in
+            // 分析中の場合、タイムアウトをチェック
+            if log.isAnalyzing && !hasTimedOut {
+                hasTimedOut = log.hasTimedOut
+            }
+        }
+        .onAppear {
+            // 初期状態でタイムアウトをチェック
+            hasTimedOut = log.hasTimedOut
+        }
     }
 }
 
@@ -282,6 +328,10 @@ struct CompactExerciseLogCard: View {
     @State private var offset: CGFloat = 0
     @State private var showDetail = false
     @State private var rotation: Double = 0
+    @State private var hasTimedOut: Bool = false
+    
+    // タイムアウトチェック用タイマー
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -304,7 +354,7 @@ struct CompactExerciseLogCard: View {
             HStack(spacing: 12) {
                 // 左側：アイコン（丸形）
                 ZStack {
-                    if log.isAnalyzing {
+                    if log.isAnalyzing && !hasTimedOut && !log.isAnalyzingError {
                         // 分析中：ぐるぐるスピナー
                         Circle()
                             .fill(Color(UIColor.systemGray5))
@@ -324,6 +374,15 @@ struct CompactExerciseLogCard: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 20))
                             .foregroundColor(.green)
+                    } else if hasTimedOut || log.isAnalyzingError {
+                        // タイムアウト/エラー
+                        Circle()
+                            .fill(Color.red.opacity(0.15))
+                            .frame(width: 60, height: 60)
+                        
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.red)
                     } else {
                         Circle()
                             .fill(Color(UIColor.systemGray5))
@@ -339,10 +398,17 @@ struct CompactExerciseLogCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // 名前と時間
                     HStack {
-                        Text(log.name)
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
+                        if hasTimedOut || log.isAnalyzingError {
+                            Text("分析エラー")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.red)
+                                .lineLimit(1)
+                        } else {
+                            Text(log.name)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                        }
                         
                         Spacer()
                         
@@ -355,7 +421,13 @@ struct CompactExerciseLogCard: View {
                             .cornerRadius(8)
                     }
                     
-                    if log.isAnalyzing {
+                    if hasTimedOut || log.isAnalyzingError {
+                        // タイムアウト/エラーメッセージ
+                        Text("分析がタイムアウトしました。削除してやり直してください。")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red)
+                            .lineLimit(2)
+                    } else if log.isAnalyzing {
                         // 分析中メッセージ
                         Text("消費カロリーを計算しています...")
                             .font(.system(size: 13))
@@ -388,10 +460,18 @@ struct CompactExerciseLogCard: View {
                 }
             }
             .padding(12)
-            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .background(hasTimedOut || log.isAnalyzingError ? Color.red.opacity(0.05) : Color(UIColor.secondarySystemGroupedBackground))
             .cornerRadius(16)
             .offset(x: offset)
             .onTapGesture {
+                // 分析中またはエラー時はタップで削除確認
+                if hasTimedOut || log.isAnalyzingError {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        offset = -80
+                    }
+                    return
+                }
+                
                 // 分析中はタップ無効
                 guard !log.isAnalyzing else { return }
                 
@@ -406,7 +486,7 @@ struct CompactExerciseLogCard: View {
             .gesture(
                 DragGesture(minimumDistance: 20, coordinateSpace: .local)
                     .onChanged { value in
-                        guard !log.isAnalyzing else { return }
+                        guard !log.isAnalyzing || hasTimedOut || log.isAnalyzingError else { return }
                         
                         let translation = value.translation.width
                         let verticalMovement = abs(value.translation.height)
@@ -421,7 +501,7 @@ struct CompactExerciseLogCard: View {
                         }
                     }
                     .onEnded { value in
-                        guard !log.isAnalyzing else { return }
+                        guard !log.isAnalyzing || hasTimedOut || log.isAnalyzingError else { return }
                         
                         let velocity = value.predictedEndTranslation.width
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -451,6 +531,16 @@ struct CompactExerciseLogCard: View {
                 existingLogId: log.id,
                 existingLogDate: log.date
             )
+        }
+        .onReceive(timer) { _ in
+            // 分析中の場合、タイムアウトをチェック
+            if log.isAnalyzing && !hasTimedOut {
+                hasTimedOut = log.hasTimedOut
+            }
+        }
+        .onAppear {
+            // 初期状態でタイムアウトをチェック
+            hasTimedOut = log.hasTimedOut
         }
     }
 }

@@ -160,9 +160,8 @@ struct S46_MealDetailView: View {
     // MARK: - 料理名セクション
     private var mealNameSection: some View {
         HStack {
-            if isFromLog && !isEditMode {
-                bookmarkButton
-            }
+            // ブックマークボタン（常に表示）
+            bookmarkButton
             
             TextField("料理名", text: $editedMealName)
                 .font(.system(size: 24, weight: .bold))
@@ -460,8 +459,11 @@ struct S46_MealDetailView: View {
             userInfo: ["message": message, "color": Color.green]
         )
         
-        // 即座にホームに戻る（通知だけでdismissは呼ばない）
+        // 全ての食事画面を閉じる通知を送信
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
+        
+        // この画面を閉じる
+        dismiss()
     }
     
     private func addToSavedMeals() {

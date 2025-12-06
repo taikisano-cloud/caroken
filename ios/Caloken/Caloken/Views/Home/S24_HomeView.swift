@@ -55,7 +55,7 @@ struct S24_HomeView: View {
             S27_3_NutritionGoalView()
         }
         .navigationDestination(isPresented: $showChat) {
-            CaloChatView(selectedDate: selectedDate)
+            CaloChatView(selectedDate: selectedDate, isPresented: $showChat)
         }
     }
 }

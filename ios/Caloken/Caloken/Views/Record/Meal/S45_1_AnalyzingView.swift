@@ -21,8 +21,8 @@ struct S45_1_AnalyzingView: View {
     
     var body: some View {
         ZStack {
-            // 背景
-            Color.black.ignoresSafeArea()
+            // 背景（ダーク/ライトモード対応）
+            Color(UIColor.systemBackground).ignoresSafeArea()
             
             VStack(spacing: 40) {
                 Spacer()
@@ -33,7 +33,7 @@ struct S45_1_AnalyzingView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 200, height: 200)
-                        .clipShape(Circle())  // 円形にクロップ
+                        .clipShape(Circle())
                         .overlay(
                             Circle()
                                 .stroke(Color.orange.opacity(0.6), lineWidth: 3)
@@ -47,13 +47,13 @@ struct S45_1_AnalyzingView: View {
                             .foregroundColor(.orange)
                         Text(description)
                             .font(.system(size: 14))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .multilineTextAlignment(.center)
                             .lineLimit(4)
                             .padding(.horizontal, 16)
                     }
                     .frame(width: 200, height: 200)
-                    .background(Color.gray.opacity(0.3))
+                    .background(Color(UIColor.secondarySystemBackground))
                     .clipShape(Circle())
                     .overlay(
                         Circle()
@@ -62,12 +62,12 @@ struct S45_1_AnalyzingView: View {
                     .shadow(color: .orange.opacity(0.4), radius: 15, x: 0, y: 5)
                 } else {
                     Circle()
-                        .fill(Color.gray.opacity(0.3))
+                        .fill(Color(UIColor.secondarySystemBackground))
                         .frame(width: 200, height: 200)
                         .overlay(
                             Image(systemName: "photo")
                                 .font(.system(size: 50))
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                         )
                 }
                 
@@ -75,7 +75,7 @@ struct S45_1_AnalyzingView: View {
                 VStack(spacing: 20) {
                     ZStack {
                         Circle()
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 4)
+                            .stroke(Color(UIColor.systemGray4), lineWidth: 4)
                             .frame(width: 60, height: 60)
                         
                         Circle()
@@ -91,11 +91,11 @@ struct S45_1_AnalyzingView: View {
                     
                     Text(statusText)
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(.primary)
                     
                     Text("AIが食事の栄養素を分析しています")
                         .font(.system(size: 14))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
@@ -103,10 +103,10 @@ struct S45_1_AnalyzingView: View {
                 Button(action: { dismiss() }) {
                     Text("キャンセル")
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                         .padding(.vertical, 12)
                         .padding(.horizontal, 40)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color(UIColor.secondarySystemBackground))
                         .cornerRadius(25)
                 }
                 .padding(.bottom, 50)

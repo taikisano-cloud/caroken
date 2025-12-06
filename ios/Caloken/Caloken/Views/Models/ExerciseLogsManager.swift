@@ -64,8 +64,13 @@ struct ExerciseLogEntry: Identifiable, Codable {
     var intensity: String
     var date: Date
     var isAnalyzing: Bool
+    var analyzingStartedAt: Date?  // 分析開始時刻
+    var isAnalyzingError: Bool  // 分析エラーフラグ
     
-    init(id: UUID = UUID(), name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType, intensity: String = "", date: Date = Date(), isAnalyzing: Bool = false) {
+    // タイムアウト時間（秒）
+    static let analysisTimeout: TimeInterval = 30
+    
+    init(id: UUID = UUID(), name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType, intensity: String = "", date: Date = Date(), isAnalyzing: Bool = false, analyzingStartedAt: Date? = nil, isAnalyzingError: Bool = false) {
         self.id = id
         self.name = name
         self.duration = duration
@@ -74,6 +79,14 @@ struct ExerciseLogEntry: Identifiable, Codable {
         self.intensity = intensity
         self.date = date
         self.isAnalyzing = isAnalyzing
+        self.analyzingStartedAt = isAnalyzing ? (analyzingStartedAt ?? Date()) : nil
+        self.isAnalyzingError = isAnalyzingError
+    }
+    
+    // タイムアウトしているかどうか
+    var hasTimedOut: Bool {
+        guard isAnalyzing, let startedAt = analyzingStartedAt else { return false }
+        return Date().timeIntervalSince(startedAt) > ExerciseLogEntry.analysisTimeout
     }
     
     var timeString: String {

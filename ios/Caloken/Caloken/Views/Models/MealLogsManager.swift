@@ -14,8 +14,13 @@ struct MealLogEntry: Identifiable, Codable {
     var hasImage: Bool
     var isBookmarked: Bool
     var isAnalyzing: Bool  // 分析中フラグ
+    var analyzingStartedAt: Date?  // 分析開始時刻
+    var isAnalyzingError: Bool  // 分析エラーフラグ
     
-    init(id: UUID = UUID(), name: String, calories: Int, protein: Int, fat: Int, carbs: Int, emoji: String = "🍽️", date: Date = Date(), image: UIImage? = nil, isBookmarked: Bool = false, isAnalyzing: Bool = false) {
+    // タイムアウト時間（秒）
+    static let analysisTimeout: TimeInterval = 30
+    
+    init(id: UUID = UUID(), name: String, calories: Int, protein: Int, fat: Int, carbs: Int, emoji: String = "🍽️", date: Date = Date(), image: UIImage? = nil, isBookmarked: Bool = false, isAnalyzing: Bool = false, analyzingStartedAt: Date? = nil, isAnalyzingError: Bool = false) {
         self.id = id
         self.name = name
         self.calories = calories
@@ -27,10 +32,18 @@ struct MealLogEntry: Identifiable, Codable {
         self.hasImage = image != nil
         self.isBookmarked = isBookmarked
         self.isAnalyzing = isAnalyzing
+        self.analyzingStartedAt = isAnalyzing ? (analyzingStartedAt ?? Date()) : nil
+        self.isAnalyzingError = isAnalyzingError
         
         if let image = image {
             MealImageStorage.shared.saveImage(image, for: id)
         }
+    }
+    
+    // タイムアウトしているかどうか
+    var hasTimedOut: Bool {
+        guard isAnalyzing, let startedAt = analyzingStartedAt else { return false }
+        return Date().timeIntervalSince(startedAt) > MealLogEntry.analysisTimeout
     }
     
     var image: UIImage? {

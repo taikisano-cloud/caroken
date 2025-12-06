@@ -81,16 +81,6 @@ struct S23_LoginView: View {
                     .padding(.horizontal, 24)
                     .disabled(isSigningIn)
                     
-                    // 開発用スキップボタン
-                    Button {
-                        navigateToPaywall = true
-                    } label: {
-                        Text("スキップ（開発用）")
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.top, 8)
-                    
                     // 利用規約とプライバシーポリシー
                     VStack(spacing: 4) {
                         Text("続行することで、カロ研の")

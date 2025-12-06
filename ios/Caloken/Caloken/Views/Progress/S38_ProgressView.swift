@@ -215,67 +215,205 @@ struct ProgressCard: View {
 
 // MARK: - マイルストーンカード
 struct MilestoneCardImproved: View {
-    let startWeight, targetWeight, currentWeight: Double
+    let startWeight: Double
+    let targetWeight: Double
+    let currentWeight: Double
     let targetDate: Date
     @Binding var showAll: Bool
     let hasDeadline: Bool
     var onSetDeadline: () -> Void
     
-    private var allMilestones: [(week: Int, targetWeight: Double, date: Date, isCompleted: Bool)] {
+    // 減量か増量かを判定
+    private var isWeightLoss: Bool {
+        startWeight > targetWeight
+    }
+    
+    // 総週数を計算
+    private var totalWeeks: Int {
+        guard hasDeadline else { return 0 }
+        let weeks = Calendar.current.dateComponents([.weekOfYear], from: Date(), to: targetDate).weekOfYear ?? 8
+        return max(weeks, 1)
+    }
+    
+    // 週ごとの体重変化量
+    private var weeklyChange: Double {
+        guard totalWeeks > 0 else { return 0 }
+        return (startWeight - targetWeight) / Double(totalWeeks)
+    }
+    
+    // 全マイルストーン生成
+    private var allMilestones: [MilestoneData] {
         guard hasDeadline else { return [] }
-        let totalWeeks = max(Calendar.current.dateComponents([.weekOfYear], from: Date(), to: targetDate).weekOfYear ?? 8, 1)
-        let weeklyLoss = (startWeight - targetWeight) / Double(totalWeeks)
+        
         return (1...totalWeeks).map { week in
-            let wt = startWeight - (weeklyLoss * Double(week))
-            let dt = Calendar.current.date(byAdding: .weekOfYear, value: week, to: Date()) ?? Date()
-            return (week, wt, dt, currentWeight <= wt)
+            let milestoneWeight = startWeight - (weeklyChange * Double(week))
+            let milestoneDate = Calendar.current.date(byAdding: .weekOfYear, value: week, to: Date()) ?? Date()
+            
+            // 達成判定（減量の場合は現在体重がマイルストーン以下、増量の場合は以上）
+            let isCompleted: Bool
+            if isWeightLoss {
+                isCompleted = currentWeight <= milestoneWeight
+            } else {
+                isCompleted = currentWeight >= milestoneWeight
+            }
+            
+            return MilestoneData(
+                week: week,
+                targetWeight: milestoneWeight,
+                date: milestoneDate,
+                isCompleted: isCompleted
+            )
         }
     }
     
-    private var filteredMilestones: [(week: Int, targetWeight: Double, date: Date, isCompleted: Bool)] {
+    // 現在の体重がどの週に相当するか
+    private var currentWeekIndex: Int? {
+        guard hasDeadline, weeklyChange != 0 else { return nil }
+        
+        let progress = (startWeight - currentWeight) / weeklyChange
+        let weekIndex = Int(progress)
+        
+        // 範囲内に収める
+        if weekIndex < 0 { return nil }
+        if weekIndex >= totalWeeks { return totalWeeks - 1 }
+        return weekIndex
+    }
+    
+    // 目標を達成したかどうか
+    private var isGoalAchieved: Bool {
+        if isWeightLoss {
+            return currentWeight <= targetWeight
+        } else {
+            return currentWeight >= targetWeight
+        }
+    }
+    
+    // 表示するマイルストーン（フィルタリング）
+    private var filteredMilestones: [MilestoneData] {
         if showAll { return allMilestones }
-        let idx = allMilestones.firstIndex { !$0.isCompleted } ?? 0
-        let start = max(idx - 2, 0)
-        let end = min(idx + 1, allMilestones.count - 1)
-        guard start <= end else { return [] }
+        
+        // 次に達成すべきマイルストーンのインデックス
+        let nextIdx = allMilestones.firstIndex { !$0.isCompleted } ?? 0
+        
+        // 前後2つずつ表示
+        let start = max(nextIdx - 1, 0)
+        let end = min(nextIdx + 2, allMilestones.count - 1)
+        
+        guard start <= end, !allMilestones.isEmpty else { return [] }
         return Array(allMilestones[start...end])
+    }
+    
+    // 次に達成すべき週
+    private var nextTargetWeek: Int? {
+        allMilestones.first { !$0.isCompleted }?.week
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // ヘッダー
             HStack {
-                Text("マイルストーン").font(.system(size: 20, weight: .bold))
+                Text("マイルストーン")
+                    .font(.system(size: 20, weight: .bold))
                 Spacer()
                 if hasDeadline && allMilestones.count > 4 {
-                    Button { withAnimation { showAll.toggle() } } label: {
-                        Text(showAll ? "最近のみ" : "全て表示").font(.system(size: 13, weight: .medium)).foregroundColor(.orange)
+                    Button {
+                        withAnimation { showAll.toggle() }
+                    } label: {
+                        Text(showAll ? "最近のみ" : "全て表示")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.orange)
                     }
                 }
             }
             
             if hasDeadline {
-                let nextIdx = allMilestones.firstIndex { !$0.isCompleted }
+                // 現在の進捗状況
+                if isGoalAchieved {
+                    // 目標達成！
+                    HStack(spacing: 4) {
+                        Text("🎉")
+                            .font(.system(size: 14))
+                        Text("目標達成！おめでとうございます！")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.green)
+                    }
+                    .padding(.bottom, 4)
+                } else if let currentWeek = currentWeekIndex {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.orange)
+                        Text("現在: 週\(currentWeek + 1)相当")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.bottom, 4)
+                } else if currentWeight > startWeight && isWeightLoss {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.yellow)
+                        Text("開始時より体重が増加しています")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.bottom, 4)
+                }
+                
+                // マイルストーン一覧
                 VStack(spacing: 0) {
-                    ForEach(filteredMilestones, id: \.week) { m in
-                        let isCurrent = m.week == (nextIdx.map { allMilestones[$0].week } ?? 0)
-                        MilestoneRow(week: m.week, targetWeight: m.targetWeight, date: m.date, isCompleted: m.isCompleted, isCurrent: isCurrent)
+                    ForEach(filteredMilestones) { milestone in
+                        let isNext = milestone.week == nextTargetWeek
+                        MilestoneRow(
+                            week: milestone.week,
+                            targetWeight: milestone.targetWeight,
+                            date: milestone.date,
+                            isCompleted: milestone.isCompleted,
+                            isCurrent: isNext
+                        )
                     }
                 }
             } else {
+                // 期限未設定時のプレースホルダー
                 VStack(spacing: 16) {
-                    Image(systemName: "calendar.badge.plus").font(.system(size: 40)).foregroundColor(.secondary)
-                    Text("期限を設定してください").font(.system(size: 15)).foregroundColor(.secondary)
-                    Text("期限が確定するとマイルストーンが\n自動的に作成されます").font(.system(size: 13)).foregroundColor(.secondary).multilineTextAlignment(.center)
-                    Button { onSetDeadline() } label: {
-                        Text("期限を設定する").font(.system(size: 15, weight: .semibold)).foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 12).background(Color.orange).cornerRadius(10)
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("期限を設定してください")
+                        .font(.system(size: 15))
+                        .foregroundColor(.secondary)
+                    Text("期限が確定するとマイルストーンが\n自動的に作成されます")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button {
+                        onSetDeadline()
+                    } label: {
+                        Text("期限を設定する")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.orange)
+                            .cornerRadius(10)
                     }
-                }.padding(.vertical, 20)
+                }
+                .padding(.vertical, 20)
             }
         }
         .padding(20)
         .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(16)
     }
+}
+
+// マイルストーンデータモデル
+struct MilestoneData: Identifiable {
+    let id = UUID()
+    let week: Int
+    let targetWeight: Double
+    let date: Date
+    let isCompleted: Bool
 }
 
 struct MilestoneRow: View {
@@ -417,7 +555,7 @@ struct SwipeableCalorieBarChartCard: View {
             Text("カロリー推移").font(.system(size: 16, weight: .semibold)).foregroundColor(.secondary).padding(.horizontal, 20).padding(.top, 20)
             TabView(selection: $selectedPeriod) {
                 ForEach(ProgressPeriod.allCases, id: \.self) { CalorieBarContent(period: $0).tag($0) }
-            }.tabViewStyle(.page(indexDisplayMode: .never)).frame(height: 200)
+            }.tabViewStyle(.page(indexDisplayMode: .never)).frame(height: 240)
         }.background(Color(UIColor.secondarySystemGroupedBackground)).cornerRadius(16)
     }
 }
@@ -492,7 +630,7 @@ struct CalorieBarContent: View {
         case .sixMonths:
             return getMonthLabels(cal: cal, today: today, months: 6)
         case .year:
-            return ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"]
+            return ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
         case .all:
             return ["開始", "", "", "", "", "", "", "", "", "", "", "現在"]
         }
@@ -535,10 +673,12 @@ struct CalorieBarContent: View {
     var body: some View {
         VStack(spacing: 0) {
             averageHeader
-            chartContent
+            chartContentWithOverlay
             xAxisLabels
         }
     }
+    
+    @State private var selectedBarIndex: Int? = nil
     
     private var averageHeader: some View {
         HStack {
@@ -553,20 +693,21 @@ struct CalorieBarContent: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 8)
+        .padding(.bottom, 4)
     }
     
-    private var chartContent: some View {
+    private var chartContentWithOverlay: some View {
         HStack(alignment: .bottom, spacing: 6) {
             yAxisLabels
             barsView
         }
-        .frame(height: 110)
+        .frame(height: 160)  // 吹き出し用スペース確保
         .padding(.horizontal, 20)
     }
     
     private var yAxisLabels: some View {
         VStack(alignment: .trailing, spacing: 0) {
+            Spacer().frame(height: 60)  // 吹き出し用スペース
             Text("\(maxV)")
                 .font(.system(size: 9))
                 .foregroundColor(.secondary)
@@ -579,15 +720,31 @@ struct CalorieBarContent: View {
                 .font(.system(size: 9))
                 .foregroundColor(.secondary)
         }
-        .frame(width: 28, height: 100)
+        .frame(width: 28, height: 160)
     }
     
     private var barsView: some View {
         HStack(alignment: .bottom, spacing: 6) {
             ForEach(Array(data.enumerated()), id: \.offset) { index, value in
-                CalorieBar(value: value, maxValue: maxV, isLast: index == data.count - 1)
+                CalorieBarWithTooltip(
+                    value: value,
+                    maxValue: maxV,
+                    label: labels.indices.contains(index) ? labels[index] : "",
+                    isLast: index == data.count - 1,
+                    isSelected: selectedBarIndex == index,
+                    onTap: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            if selectedBarIndex == index {
+                                selectedBarIndex = nil
+                            } else {
+                                selectedBarIndex = index
+                            }
+                        }
+                    }
+                )
             }
         }
+        .frame(height: 160)
     }
     
     private var xAxisLabels: some View {
@@ -596,7 +753,8 @@ struct CalorieBarContent: View {
             ForEach(labels.indices, id: \.self) { index in
                 Text(labels[index])
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(selectedBarIndex == index ? .orange : .secondary)
+                    .fontWeight(selectedBarIndex == index ? .semibold : .regular)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -606,10 +764,14 @@ struct CalorieBarContent: View {
     }
 }
 
-struct CalorieBar: View {
+// MARK: - カロリーバー（吹き出し付き）
+struct CalorieBarWithTooltip: View {
     let value: Int
     let maxValue: Int
+    let label: String
     let isLast: Bool
+    let isSelected: Bool
+    let onTap: () -> Void
     
     private var barHeight: CGFloat {
         value > 0 ? max(CGFloat(value) / CGFloat(maxValue) * 100, 8) : 8
@@ -617,19 +779,53 @@ struct CalorieBar: View {
     
     private var barColor: Color {
         if value > 0 {
+            if isSelected {
+                return Color.orange
+            }
             return isLast ? Color.orange : Color.orange.opacity(0.5)
         }
         return Color(UIColor.systemGray5)
     }
     
     var body: some View {
-        VStack {
-            Spacer()
-            RoundedRectangle(cornerRadius: 4)
-                .fill(barColor)
-                .frame(height: barHeight)
+        ZStack(alignment: .top) {
+            // バー部分（サイズ固定）
+            VStack {
+                Spacer()
+                
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(barColor)
+                    .frame(height: barHeight)
+            }
+            
+            // 吹き出し（選択時のみ表示、バーの上に固定）
+            if isSelected && value > 0 {
+                VStack(spacing: 1) {
+                    // 数字のみの場合は「月」を付ける（1年表示用）
+                    Text(Int(label) != nil ? "\(label)月" : label)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white.opacity(0.9))
+                    Text("\(value)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("kcal")
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color.orange)
+                .cornerRadius(8)
+                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                .fixedSize()
+                .zIndex(100)
+            }
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onTap()
+        }
     }
 }
 
@@ -642,7 +838,7 @@ struct SwipeableWeightChartCard: View {
             Text("体重推移").font(.system(size: 16, weight: .semibold)).foregroundColor(.secondary).padding(.horizontal, 20).padding(.top, 20)
             TabView(selection: $selectedPeriod) {
                 ForEach(ProgressPeriod.allCases, id: \.self) { WeightChartContent(period: $0).tag($0) }
-            }.tabViewStyle(.page(indexDisplayMode: .never)).frame(height: 200)
+            }.tabViewStyle(.page(indexDisplayMode: .never)).frame(height: 240)
         }.background(Color(UIColor.secondarySystemGroupedBackground)).cornerRadius(16)
     }
 }
@@ -650,6 +846,7 @@ struct SwipeableWeightChartCard: View {
 struct WeightChartContent: View {
     let period: ProgressPeriod
     @StateObject private var manager = WeightLogsManager.shared
+    @State private var selectedPointIndex: Int? = nil
     
     private var data: [Double] {
         let logs = manager.logs(for: period)
@@ -662,11 +859,32 @@ struct WeightChartContent: View {
         return (minVal, maxVal)
     }
     
+    private var weekLabels: [String] {
+        ["月", "火", "水", "木", "金", "土", "日"]
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
+            currentHeader
             chartArea
             xAxisLabels
         }
+    }
+    
+    private var currentHeader: some View {
+        HStack {
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("現在")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                Text(String(format: "%.1f kg", data.last ?? manager.currentWeight))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 4)
     }
     
     private var chartArea: some View {
@@ -679,6 +897,7 @@ struct WeightChartContent: View {
     
     private var yAxisLabels: some View {
         VStack(alignment: .trailing, spacing: 0) {
+            Spacer().frame(height: 60)  // 吹き出し用スペース
             Text(String(format: "%.0f", yRange.max))
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
@@ -691,18 +910,30 @@ struct WeightChartContent: View {
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }
-        .frame(width: 25, height: 130)
+        .frame(width: 25, height: 160)
     }
     
     private var chartGraph: some View {
         GeometryReader { geo in
-            ZStack {
-                gridLines
-                chartLine(in: geo)
-                chartPoints(in: geo)
+            let tooltipSpace: CGFloat = 60
+            let chartHeight: CGFloat = 100
+            
+            ZStack(alignment: .top) {
+                // グリッドとライン部分（下寄せ）
+                VStack(spacing: 0) {
+                    Spacer().frame(height: tooltipSpace)
+                    ZStack {
+                        gridLines
+                        chartLineView(in: geo, height: chartHeight)
+                    }
+                    .frame(height: chartHeight)
+                }
+                
+                // ポイントと吹き出し
+                chartPointsWithTooltips(in: geo, chartHeight: chartHeight, tooltipSpace: tooltipSpace)
             }
         }
-        .frame(height: 130)
+        .frame(height: 160)
     }
     
     private var gridLines: some View {
@@ -715,13 +946,13 @@ struct WeightChartContent: View {
     }
     
     @ViewBuilder
-    private func chartLine(in geo: GeometryProxy) -> some View {
+    private func chartLineView(in geo: GeometryProxy, height: CGFloat) -> some View {
         if data.count > 1 {
             Path { path in
                 let span = yRange.max - yRange.min
                 for (index, value) in data.enumerated() {
                     let x = geo.size.width * CGFloat(index) / CGFloat(data.count - 1)
-                    let y = geo.size.height * (1 - CGFloat((value - yRange.min) / span))
+                    let y = height * (1 - CGFloat((value - yRange.min) / span))
                     if index == 0 {
                         path.move(to: CGPoint(x: x, y: y))
                     } else {
@@ -734,38 +965,114 @@ struct WeightChartContent: View {
     }
     
     @ViewBuilder
-    private func chartPoints(in geo: GeometryProxy) -> some View {
+    private func chartPointsWithTooltips(in geo: GeometryProxy, chartHeight: CGFloat, tooltipSpace: CGFloat) -> some View {
         let span = yRange.max - yRange.min
         
         if data.count > 1 {
             ForEach(0..<data.count, id: \.self) { index in
                 let x = geo.size.width * CGFloat(index) / CGFloat(data.count - 1)
-                let y = geo.size.height * (1 - CGFloat((data[index] - yRange.min) / span))
-                Circle()
-                    .fill(Color.blue.opacity(0.7))
-                    .frame(width: 8, height: 8)
-                    .position(x: x, y: y)
+                let relativeY = chartHeight * (1 - CGFloat((data[index] - yRange.min) / span))
+                let y = tooltipSpace + relativeY
+                let isSelected = selectedPointIndex == index
+                
+                ZStack {
+                    // 吹き出し（選択時のみ）
+                    if isSelected {
+                        VStack(spacing: 1) {
+                            Text(weekLabels.indices.contains(index) ? weekLabels[index] : "")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                            Text(String(format: "%.1f", data[index]))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("kg")
+                                .font(.system(size: 9))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.blue)
+                        .cornerRadius(8)
+                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        .fixedSize()
+                        .offset(y: -40)
+                        .zIndex(100)
+                    }
+                    
+                    // ポイント
+                    Circle()
+                        .fill(isSelected ? Color.blue : Color.blue.opacity(0.7))
+                        .frame(width: isSelected ? 14 : 8, height: isSelected ? 14 : 8)
+                }
+                .position(x: x, y: y)
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if selectedPointIndex == index {
+                            selectedPointIndex = nil
+                        } else {
+                            selectedPointIndex = index
+                        }
+                    }
+                }
             }
         } else {
-            let y = geo.size.height * (1 - CGFloat((data[0] - yRange.min) / span))
-            Circle()
-                .fill(Color.blue.opacity(0.7))
-                .frame(width: 8, height: 8)
-                .position(x: geo.size.width / 2, y: y)
+            let relativeY = chartHeight * (1 - CGFloat((data[0] - yRange.min) / span))
+            let y = tooltipSpace + relativeY
+            let isSelected = selectedPointIndex == 0
+            
+            ZStack {
+                if isSelected {
+                    VStack(spacing: 1) {
+                        Text("今日")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.9))
+                        Text(String(format: "%.1f", data[0]))
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                        Text("kg")
+                            .font(.system(size: 9))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    .fixedSize()
+                    .offset(y: -40)
+                    .zIndex(100)
+                }
+                
+                Circle()
+                    .fill(isSelected ? Color.blue : Color.blue.opacity(0.7))
+                    .frame(width: isSelected ? 14 : 8, height: isSelected ? 14 : 8)
+            }
+            .position(x: geo.size.width / 2, y: y)
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if selectedPointIndex == 0 {
+                        selectedPointIndex = nil
+                    } else {
+                        selectedPointIndex = 0
+                    }
+                }
+            }
         }
     }
     
     private var xAxisLabels: some View {
         HStack {
             Spacer().frame(width: 33)
-            ForEach(["月", "火", "水", "木", "金", "土", "日"], id: \.self) { day in
+            ForEach(Array(weekLabels.enumerated()), id: \.offset) { index, day in
                 Text(day)
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(selectedPointIndex == index ? .blue : .secondary)
+                    .fontWeight(selectedPointIndex == index ? .semibold : .regular)
                     .frame(maxWidth: .infinity)
             }
         }
         .padding(.horizontal, 20)
+        .padding(.top, 4)
         .padding(.bottom, 16)
     }
 }

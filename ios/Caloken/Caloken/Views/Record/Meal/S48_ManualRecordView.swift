@@ -9,6 +9,13 @@ struct S48_ManualRecordView: View {
     
     var body: some View {
         ZStack {
+            // 背景タップでキーボードを閉じる
+            Color(UIColor.systemGroupedBackground)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    isTextFieldFocused = false
+                }
+            
             // メインコンテンツ
             VStack(spacing: 0) {
                 ScrollView {
@@ -47,10 +54,10 @@ struct S48_ManualRecordView: View {
                     }
                     .padding(20)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 
+                // キーボード上のボタンエリア（角丸）
                 VStack(spacing: 0) {
-                    Divider()
-                    
                     Button(action: { startAnalysis() }) {
                         HStack(spacing: 8) {
                             Image(systemName: "sparkles")
@@ -68,9 +75,13 @@ struct S48_ManualRecordView: View {
                         .cornerRadius(16)
                     }
                     .disabled(mealDescription.isEmpty || isAnalyzing)
-                    .padding(20)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
                 }
-                .background(Color(UIColor.systemBackground))
+                .background(
+                    RoundedCornerShape(corners: [.topLeft, .topRight], radius: 20)
+                        .fill(Color(UIColor.secondarySystemGroupedBackground))
+                )
             }
             .background(Color(UIColor.systemGroupedBackground))
             .opacity(isAnalyzing ? 0.3 : 1.0)
@@ -110,15 +121,6 @@ struct S48_ManualRecordView: View {
                         .foregroundColor(.primary)
                 }
                 .disabled(isAnalyzing)
-            }
-            
-            ToolbarItem(placement: .keyboard) {
-                HStack {
-                    Spacer()
-                    Button("完了") {
-                        isTextFieldFocused = false
-                    }
-                }
             }
         }
         .enableSwipeBack()
@@ -160,5 +162,20 @@ struct S48_ManualRecordView: View {
         
         // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
+    }
+}
+
+// MARK: - 上だけ角丸のShape
+private struct RoundedCornerShape: Shape {
+    var corners: UIRectCorner
+    var radius: CGFloat
+    
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
     }
 }
