@@ -1,12 +1,17 @@
 import SwiftUI
 
 struct S24_HomeView: View {
+    var bottomPadding: CGFloat = 0
+    
     @State private var selectedDate = Date()
+    @State private var showNutritionGoal = false
+    @State private var showChat = false
+    @ObservedObject private var logsManager = MealLogsManager.shared
+    @ObservedObject private var profileManager = UserProfileManager.shared
     
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // カスタムヘッダー（スクロールと同期）
                 HStack(spacing: 0) {
                     Image("caloken_character")
                         .renderingMode(.original)
@@ -15,58 +20,101 @@ struct S24_HomeView: View {
                         .frame(width: 60, height: 60)
                         .offset(x: 4)
                     
-                    Text("Caloken")
+                    Text("カロ研")
                         .font(.system(size: 30, weight: .bold))
-                        .foregroundColor(Color.appBrown)
+                        .foregroundColor(Color.titleColor)
                         .offset(x: -4, y: -3)
                     
                     Spacer()
+                    
+                    NavigationLink(destination: S27_1_SettingsView()) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.trailing, 4)
                 }
+                .padding(.horizontal, 16)
                 .padding(.top, 60)
                 
-                // カレンダー
                 WeekCalendarView(selectedDate: $selectedDate)
                     .padding(.horizontal, 16)
                 
-                // メトリクス
-                MetricsTabView()
-                    .padding(.top, 4)  // 8 → 4 に変更
+                MetricsTabView(selectedDate: $selectedDate, showNutritionGoal: $showNutritionGoal, showChat: $showChat)
+                    .padding(.top, 4)
                 
-                // 最近のログ
-                RecentLogsCard()
+                RecentLogsCard(selectedDate: $selectedDate)
                     .padding(.horizontal, 16)
             }
+            .padding(.bottom, bottomPadding)
         }
-        .background(Color.appGray)
+        .background(Color(UIColor.systemGroupedBackground))
         .ignoresSafeArea(edges: .top)
+        .navigationBarHidden(true)
+        .navigationDestination(isPresented: $showNutritionGoal) {
+            S27_3_NutritionGoalView()
+        }
+        .navigationDestination(isPresented: $showChat) {
+            CaloChatView(selectedDate: selectedDate)
+        }
     }
 }
 
+// MARK: - ダークモード対応カラー
+extension Color {
+    static var dynamicAccent: Color {
+        Color(UIColor { tc in
+            tc.userInterfaceStyle == .dark
+            ? UIColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 1.0)
+            : UIColor(red: 1.0, green: 0.45, blue: 0.0, alpha: 1.0)
+        })
+    }
+    
+    static var titleColor: Color {
+        Color(UIColor { tc in
+            tc.userInterfaceStyle == .dark
+            ? UIColor(red: 1.0, green: 0.55, blue: 0.0, alpha: 1.0)
+            : UIColor.black
+        })
+    }
+}
 
+// MARK: - 週カレンダー
 struct WeekCalendarView: View {
     @Binding var selectedDate: Date
     @State private var currentWeekOffset: Int = 0
+    @ObservedObject private var logsManager = MealLogsManager.shared
     
     private let calendar = Calendar.current
     private let weekdays = ["月", "火", "水", "木", "金", "土", "日"]
     
-    // 仮のログ記録データ
-    private let hasLogDates: Set<Int> = [20, 24, 25]
+    private var currentMonthText: String {
+        let midDate = getDate(for: 3, weekOffset: currentWeekOffset)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.dateFormat = "M月"
+        return formatter.string(from: midDate)
+    }
     
     var body: some View {
         VStack(spacing: 0) {
+            Text(currentMonthText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 8)
+            
             TabView(selection: $currentWeekOffset) {
                 ForEach(-52...52, id: \.self) { weekOffset in
-                    weekView(offset: weekOffset)
-                        .tag(weekOffset)
+                    weekView(offset: weekOffset).tag(weekOffset)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 90)
+            .frame(height: 70)
         }
-        .background(Color.white)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
     }
     
     private func weekView(offset: Int) -> some View {
@@ -76,58 +124,41 @@ struct WeekCalendarView: View {
                 let day = calendar.component(.day, from: date)
                 let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
                 let isToday = calendar.isDateInToday(date)
-                let hasLog = hasLogDates.contains(day)
+                let hasLog = logsManager.hasLogs(for: date)
                 
                 VStack(spacing: 4) {
-                    // 曜日（上）
                     Text(weekdays[index])
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                     
-                    // 日付と背景（下）
                     ZStack {
                         if isToday {
-                            // 今日：点線の円（茶色）
                             Circle()
-                                .stroke(
-                                    Color.appBrown,
-                                    style: StrokeStyle(lineWidth: 2, dash: [3, 3])
-                                )
+                                .stroke(Color.dynamicAccent, style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
                                 .frame(width: 40, height: 40)
                         } else if hasLog {
-                            // ログがある日：塗りつぶした円（茶色）
                             Circle()
-                                .fill(Color.appBrown)
+                                .fill(Color.dynamicAccent)
                                 .frame(width: 40, height: 40)
                         } else {
-                            // ログがない日：点線の円（グレー）
                             Circle()
-                                .stroke(
-                                    Color.gray.opacity(0.3),
-                                    style: StrokeStyle(lineWidth: 2, dash: [3, 3])
-                                )
+                                .stroke(Color(UIColor.systemGray3), style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
                                 .frame(width: 40, height: 40)
                         }
                         
-                        // 選択中の強調表示
                         if isSelected && !isToday {
                             Circle()
-                                .stroke(Color.appBrown, lineWidth: 3)
+                                .stroke(Color.dynamicAccent, lineWidth: 3)
                                 .frame(width: 44, height: 44)
                         }
                         
-                        // 日付テキスト
                         Text("\(day)")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(
-                                hasLog && !isToday ? .white : .primary
-                            )
+                            .foregroundColor(hasLog && !isToday ? Color(UIColor.white) : .primary)
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .onTapGesture {
-                    selectedDate = date
-                }
+                .onTapGesture { selectedDate = date }
             }
         }
         .padding(.vertical, 10)
@@ -136,41 +167,38 @@ struct WeekCalendarView: View {
     
     private func getDate(for weekdayIndex: Int, weekOffset: Int) -> Date {
         let today = Date()
-        
-        var calendar = Calendar.current
-        calendar.firstWeekday = 2
-        
-        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
-        guard let startOfWeek = calendar.date(from: components) else {
+        var cal = Calendar.current
+        cal.firstWeekday = 2
+        let components = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        guard let startOfWeek = cal.date(from: components),
+              let offsetWeek = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startOfWeek) else {
             return today
         }
-        
-        guard let offsetWeek = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: startOfWeek) else {
-            return today
-        }
-        
-        return calendar.date(byAdding: .day, value: weekdayIndex, to: offsetWeek) ?? today
+        return cal.date(byAdding: .day, value: weekdayIndex, to: offsetWeek) ?? today
     }
 }
+
+// MARK: - メトリクスタブビュー
 struct MetricsTabView: View {
+    @Binding var selectedDate: Date
+    @Binding var showNutritionGoal: Bool
+    @Binding var showChat: Bool
     @State private var currentPage = 0
     
     var body: some View {
         VStack(spacing: 4) {
             TabView(selection: $currentPage) {
-                CalorieCardImproved()
-                    .tag(0)
-                
-                ActivityCard()
-                    .tag(1)
+                CalorieWithAdviceCard(selectedDate: $selectedDate, showNutritionGoal: $showNutritionGoal, showChat: $showChat).tag(0)
+                NutritionCard(selectedDate: $selectedDate, showNutritionGoal: $showNutritionGoal).tag(1)
+                ActivityWaterCard(selectedDate: $selectedDate).tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: 380)  // 400 → 380
+            .frame(height: 340)
             
             HStack(spacing: 8) {
-                ForEach(0..<2) { index in
+                ForEach(0..<3) { index in
                     Circle()
-                        .fill(currentPage == index ? Color.appBrown : Color.gray.opacity(0.3))
+                        .fill(currentPage == index ? Color.dynamicAccent : Color(UIColor.systemGray3))
                         .frame(width: 6, height: 6)
                 }
             }
@@ -179,589 +207,549 @@ struct MetricsTabView: View {
     }
 }
 
-struct CalorieCardImproved: View {
-    let current: Int = 2000
-    let target: Int = 2740
-    let exerciseBonus: Int = 250
-    let hasExerciseRecord: Bool = true
+// MARK: - カロリー + アドバイスカード
+struct CalorieWithAdviceCard: View {
+    @Binding var selectedDate: Date
+    @Binding var showNutritionGoal: Bool
+    @Binding var showChat: Bool
+    @ObservedObject private var logsManager = MealLogsManager.shared
+    @ObservedObject private var exerciseLogsManager = ExerciseLogsManager.shared
+    @ObservedObject private var profileManager = UserProfileManager.shared
     
-    var progress: Double {
-        return min(Double(current) / Double(target), 1.0)
+    var baseTarget: Int { profileManager.calorieGoal }
+    
+    // 全運動の消費カロリー
+    var exerciseBonus: Int { exerciseLogsManager.totalCaloriesBurned(for: selectedDate) }
+    
+    var target: Int { baseTarget + exerciseBonus }
+    var current: Int { logsManager.totalCalories(for: selectedDate) }
+    
+    var progressRatio: Double {
+        guard target > 0 else { return 0 }
+        return Double(current) / Double(target)
+    }
+    
+    var isOverTarget: Bool { current > target }
+    
+    var adviceText: String {
+        let nutrients = logsManager.totalNutrients(for: selectedDate)
+        if current == 0 {
+            return "今日はまだ何も食べてないにゃ🐱\n何か記録してみよう！"
+        } else if nutrients.protein < 50 {
+            return "今日はタンパク質が不足気味だにゃ🐱夕食でお肉か魚を食べるといいかも！"
+        } else if current > target {
+            return "今日はカロリーオーバーだにゃ😅明日は少し控えめにしよう！"
+        } else {
+            return "いい感じだにゃ🐱バランスよく食べられてるよ！この調子✨"
+        }
     }
     
     var body: some View {
-        VStack(spacing: 8) {  // 12 → 8
-            VStack(spacing: 8) {
-                ZStack {
-                    SemiCircle()
-                        .stroke(Color.gray.opacity(0.4), lineWidth: 20)
-                        .frame(width: 240, height: 120)
-                    
-                    SemiCircle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.appBrown, style: StrokeStyle(lineWidth: 20, lineCap: .round))
-                        .frame(width: 240, height: 120)
-                    
-                    VStack(spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text("\(current)")
-                                .font(.system(size: 36, weight: .bold))
-                                .foregroundColor(.primary)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("/\(target)")
-                                    .font(.system(size: 22, weight: .medium))
-                                    .foregroundColor(.gray)
-                                
-                                if hasExerciseRecord {
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "figure.run")
-                                            .font(.system(size: 12, weight: .semibold))
-                                        Text("+\(exerciseBonus)")
-                                            .font(.system(size: 12, weight: .semibold))
-                                    }
-                                    .foregroundColor(.primary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.gray.opacity(0.2))
-                                    .cornerRadius(8)
-                                    .offset(x: 6, y: 4)
-                                }
-                            }
+        VStack(spacing: 8) {
+            // カロリーカード（円グラフ + 数字）
+            Button { showNutritionGoal = true } label: {
+                HStack(spacing: 0) {
+                    // 左側：円グラフ
+                    ZStack {
+                        Circle()
+                            .stroke(Color(UIColor.systemGray4), lineWidth: 10)
+                            .frame(width: 100, height: 100)
+                        
+                        if progressRatio >= 2.0 {
+                            Circle()
+                                .stroke(Color.red, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                                .frame(width: 100, height: 100)
+                        } else if progressRatio > 1.0 {
+                            Circle()
+                                .stroke(Color.dynamicAccent, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                                .frame(width: 100, height: 100)
+                            Circle()
+                                .trim(from: 0, to: progressRatio - 1.0)
+                                .stroke(Color.red, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                                .frame(width: 100, height: 100)
+                                .rotationEffect(.degrees(-90))
+                                .animation(.easeInOut(duration: 0.5), value: progressRatio)
+                        } else {
+                            Circle()
+                                .trim(from: 0, to: progressRatio)
+                                .stroke(Color.dynamicAccent, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                                .frame(width: 100, height: 100)
+                                .rotationEffect(.degrees(-90))
+                                .animation(.easeInOut(duration: 0.5), value: progressRatio)
                         }
                         
-                        Text("摂取kcal")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.primary)
-                            .offset(y: 4)
-                    }
-                    .offset(y: 20)
-                }
-                .padding(.top, 12)  // 20 → 12
-                .padding(.bottom, 4)  // 8 → 4
-            }
-            .frame(maxWidth: .infinity, minHeight: 190)  // 200 → 190
-            .background(Color.white)
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-            
-            // 栄養素カード
-            HStack(spacing: 8) {
-                NutrientSemiCircleImproved(
-                    current: 60,
-                    target: 160,
-                    color: Color.red.opacity(0.7),
-                    icon: "🥩",
-                    name: "たんぱく質"
-                )
-                
-                NutrientSemiCircleImproved(
-                    current: 60,
-                    target: 69,
-                    color: Color.blue,
-                    icon: "🥑",
-                    name: "脂質"
-                )
-                
-                NutrientSemiCircleImproved(
-                    current: 300,
-                    target: 307,
-                    color: Color.orange.opacity(0.7),
-                    icon: "🍚",
-                    name: "炭水化物"
-                )
-            }
-            .padding(.vertical, 12)  // 16 → 12
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 140)  // 150 → 140
-            .background(Color.white)
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)  // 8 → 4
-    }
-}
-
-// 栄養素カード（改善版）
-struct NutrientCardRow: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            NutrientSemiCircleImproved(
-                current: 60,
-                target: 160,
-                color: Color.red.opacity(0.7),
-                icon: "🥩",
-                name: "たんぱく質"
-            )
-            
-            NutrientSemiCircleImproved(
-                current: 60,
-                target: 69,
-                color: Color.blue,
-                icon: "🥑",
-                name: "脂質"
-            )
-            
-            NutrientSemiCircleImproved(
-                current: 300,
-                target: 307,
-                color: Color.orange.opacity(0.7),
-                icon: "🍚",
-                name: "炭水化物"
-            )
-        }
-        .padding(.vertical, 20)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, minHeight: 160)  // 130 → 160
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-    }
-}
-
-struct NutrientSemiCircleImproved: View {
-    let current: Int
-    let target: Int
-    let color: Color
-    let icon: String
-    let name: String
-    var unit: String = "g"
-    
-    var progress: Double {
-        return min(Double(current) / Double(target), 1.0)
-    }
-    
-    var body: some View {
-        VStack(spacing: 6) {  // 10 → 6
-            ZStack {
-                SemiCircle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 12)
-                    .frame(width: 90, height: 45)
-                
-                SemiCircle()
-                    .trim(from: 0, to: progress)
-                    .stroke(color, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .frame(width: 90, height: 45)
-                
-                Text(icon)
-                    .font(.system(size: 26))
-                    .offset(y: 14)
-            }
-            
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
-                Text("\(current)")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(color)
-                
-                Text("/\(target)\(unit)")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.gray)
-            }
-            
-            Text(name)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.primary)
-                .offset(y: -4)  // -12 → -4
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-struct ActivityCard: View {
-    let steps: Int = 3982
-    let target: Int = 10000
-    let caloriesBurned: Int = 112
-    
-    var progress: Double {
-        return min(Double(steps) / Double(target), 1.0)
-    }
-    
-    var body: some View {
-        VStack(spacing: 8) {  // 12 → 8
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("今日の歩数")
-                        .font(.system(size: 18, weight: .medium))
-                    
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(steps)")
-                            .font(.system(size: 36, weight: .bold))
-                        Text("/ \(target)")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.primary.opacity(0.6))
-                    }
-                    
-                    Spacer()
-                        .frame(height: 4)  // 8 → 4
-                    
-                    HStack(spacing: 6) {
                         Image(systemName: "flame.fill")
-                            .foregroundColor(.orange)
                             .font(.system(size: 32))
-                        Text("\(caloriesBurned)")
-                            .font(.system(size: 36, weight: .bold))
-                            .offset(y: 1)
-                        Text("kcal")
-                            .font(.system(size: 26))
-                            .foregroundColor(.gray)
-                            .offset(y: 2)
+                            .foregroundColor(isOverTarget ? .red : .orange)
+                    }
+                    .padding(.leading, 16)
+                    
+                    // 右側：カロリー数字（中央揃え）
+                    VStack(alignment: .center, spacing: 4) {
+                        Text("摂取カロリー")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.secondary)
+                        
+                        HStack(alignment: .firstTextBaseline, spacing: 0) {
+                            Text("\(current)")
+                                .font(.system(size: 48, weight: .bold))
+                                .foregroundColor(.primary)
+                            Text("/\(target)")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // 運動ボーナス（小さめ）
+                        if exerciseBonus > 0 {
+                            HStack(spacing: 4) {
+                                Image(systemName: "figure.run")
+                                    .font(.system(size: 11))
+                                Text("+\(exerciseBonus)")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .stroke(Color(UIColor.systemGray4), lineWidth: 1)
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.trailing, 16)
+                }
+                .padding(.vertical, 16)
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(16)
+                .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // アドバイスカード（カロちゃん）
+            Button { showChat = true } label: {
+                HStack(alignment: .center, spacing: 0) {
+                    Image("caloken_full")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 110, height: 130)
+                    
+                    HStack(alignment: .center, spacing: 0) {
+                        AdviceBubbleArrow()
+                            .fill(Color(UIColor.tertiarySystemGroupedBackground))
+                            .frame(width: 10, height: 20)
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(adviceText)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.primary)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(4)
+                            
+                            HStack {
+                                Spacer()
+                                Text("タップして相談 →")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(10)
+                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        .background(Color(UIColor.tertiarySystemGroupedBackground))
+                        .cornerRadius(14)
                     }
                 }
-                .padding(.leading, 20)
-                
-                Spacer()
-                
-                ZStack {
-                    Circle()
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 14)
-                        .frame(width: 100, height: 100)
-                    
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(Color.orange, style: StrokeStyle(lineWidth: 14, lineCap: .round))
-                        .frame(width: 100, height: 100)
-                        .rotationEffect(.degrees(-90))
-                    
-                    Text("👟")
-                        .font(.system(size: 32))
-                }
-                .padding(.trailing, 20)
+                .padding(.leading, 8)
+                .padding(.trailing, 10)
+                .padding(.vertical, 6)
             }
-            .frame(maxWidth: .infinity, minHeight: 190)  // 180 → 190（カロリーカードと合わせる）
-            .background(Color.white)
+            .buttonStyle(PlainButtonStyle())
+            .background(Color(UIColor.secondarySystemGroupedBackground))
             .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-            
-            // 栄養素カード
-            HStack(spacing: 8) {
-                NutrientSemiCircleImproved(
-                    current: 20,
-                    target: 25,
-                    color: .purple,
-                    icon: "🍬",
-                    name: "糖分"
-                )
-                
-                NutrientSemiCircleImproved(
-                    current: 1,
-                    target: 28,
-                    color: .orange,
-                    icon: "🌾",
-                    name: "食物繊維"
-                )
-                
-                NutrientSemiCircleImproved(
-                    current: 100,
-                    target: 1800,
-                    color: .gray,
-                    icon: "🧂",
-                    name: "ナトリウム",
-                    unit: "mg"
-                )
-            }
-            .padding(.vertical, 12)  // 16 → 12
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: 140)  // 150 → 140
-            .background(Color.white)
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+            .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 4)  // 8 → 4
+        .padding(.vertical, 4)
     }
 }
 
-struct NutrientSemiCircle: View {
-    let current: Int
-    let target: Int
-    let color: Color
-    let icon: String
-    let name: String
-    var unit: String = "g"
-    
-    var progress: Double {
-        return min(Double(current) / Double(target), 1.0)
-    }
-    
-    var body: some View {
-        VStack(spacing: 8) {  // 4 → 8
-            ZStack {
-                SemiCircle()
-                    .stroke(Color.appLightGray, lineWidth: 10)  // 7 → 10
-                    .frame(width: 80, height: 40)  // 60, 30 → 80, 40
-                
-                SemiCircle()
-                    .trim(from: 0, to: progress)
-                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .frame(width: 80, height: 40)
-                
-                Text(icon)
-                    .font(.system(size: 24))  // 18 → 24
-                    .offset(y: 12)  // 8 → 12
-            }
-            
-            Text("\(current)/\(target)\(unit)")
-                .font(.system(size: 16, weight: .bold))  // 12 → 16, .semibold → .bold
-                .offset(y: 4)
-                .foregroundColor(.primary)
-            
-            Text(name)
-                .font(.system(size: 14, weight: .medium))  // 10 → 14, 太さ追加
-                .foregroundColor(.primary)  // .gray → .primary（黒に）
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-struct SemiCircle: Shape {
+struct AdviceBubbleArrow: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.maxY),
-            radius: rect.width / 2,
-            startAngle: .degrees(180),
-            endAngle: .degrees(0),
-            clockwise: false
-        )
+        path.move(to: CGPoint(x: rect.maxX, y: rect.midY - 8))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY + 8))
+        path.closeSubpath()
         return path
     }
 }
 
-// 最近のログ（改善版）
-struct RecentLogsCard: View {
+// MARK: - 栄養素カード
+struct NutritionCard: View {
+    @Binding var selectedDate: Date
+    @Binding var showNutritionGoal: Bool
+    @ObservedObject private var logsManager = MealLogsManager.shared
+    @ObservedObject private var profileManager = UserProfileManager.shared
+    
+    var nutrients: (protein: Int, fat: Int, carbs: Int) {
+        logsManager.totalNutrients(for: selectedDate)
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // ヘッダー
-            Text("最近のログ")
-                .font(.system(size: 20, weight: .bold))
-                .padding(.horizontal, 4)
-            
-            // ログアイテム（それぞれ独立したカード）
-            MealLogItem(
-                imageName: "meal_fried_rice",
-                name: "炒飯セット",
-                time: "22:28",
-                calories: 1200,
-                protein: 45,
-                fat: 30,
-                carbs: 150
-            )
-            
-            MealLogItem(
-                imageName: "meal_udon",
-                name: "うどん",
-                time: "15:06",
-                calories: 800,
-                protein: 20,
-                fat: 10,
-                carbs: 120
-            )
-            
-            ExerciseLogItem(
-                icon: "figure.run",
-                name: "ランニング",
-                time: "14:30",
-                caloriesBurned: 300,
-                duration: 30
-            )
+        Button { showNutritionGoal = true } label: {
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    NutrientCardCompact(current: nutrients.protein, target: profileManager.proteinGoal, color: Color.red.opacity(0.8), icon: "🥩", name: "たんぱく質")
+                    NutrientCardCompact(current: nutrients.fat, target: profileManager.fatGoal, color: Color.blue, icon: "🥑", name: "脂質")
+                    NutrientCardCompact(current: nutrients.carbs, target: profileManager.carbGoal, color: Color.orange.opacity(0.8), icon: "🍚", name: "炭水化物")
+                }
+                HStack(spacing: 6) {
+                    NutrientCardCompact(current: 0, target: profileManager.sugarGoal, color: .purple, icon: "🍬", name: "糖分")
+                    NutrientCardCompact(current: 0, target: profileManager.fiberGoal, color: Color.green, icon: "🌾", name: "食物繊維")
+                    NutrientCardCompact(current: 0, target: profileManager.sodiumGoal, color: Color(UIColor.systemGray), icon: "🧂", name: "ナトリウム", unit: "mg")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 8)
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
-// 食事ログアイテム
-struct MealLogItem: View {
-    let imageName: String
+struct NutrientCardCompact: View {
+    let current: Int
+    let target: Int
+    let color: Color
+    let icon: String
     let name: String
-    let time: String
-    let calories: Int
-    let protein: Int
-    let fat: Int
-    let carbs: Int
+    var unit: String = "g"
+    
+    var progress: Double { min(Double(current) / Double(target), 1.0) }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // 左側：食事画像
-            if let uiImage = UIImage(named: imageName) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 70, height: 70)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            } else {
-                // 画像がない場合は絵文字で代替
-                Text("🍚")
-                    .font(.system(size: 36))
-                    .frame(width: 70, height: 70)
-                    .background(Color.gray.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+        VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text("\(current)")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.primary)
+                Text("/\(target)\(unit)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
             }
             
-            // 中央・右側の情報全体
-            VStack(spacing: 0) {
-                // 上部：名前と時間
-                HStack(alignment: .top) {
-                    Text(name)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Text(time)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.primary)  // グレー → 黒に変更
-                }
-                .padding(.bottom, 6)
-                
-                // 下部：カロリーと栄養素
-                HStack(alignment: .bottom, spacing: 0) {
-                    // カロリー（さらに大きく）
-                    HStack(spacing: 1) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.orange)
-                            .offset(y: -14)
-                        
-                        Text("\(calories)")
-                            .font(.system(size: 36, weight: .bold))  // 24 → 32
-                            .foregroundColor(.primary)
-                            .offset(y: -14)
-                        
-                        Text("kcal")
-                            .font(.system(size: 18))
-                            .foregroundColor(.gray)
-                            .offset(y: -10)
-                    }
-                    
-                    Spacer()
-                    
-                    // 3大栄養素（縦並び、右寄せ）
-                    VStack(alignment: .trailing, spacing: 2) {  // .leading → .trailing
-                        NutrientRow(icon: "🥩", value: protein, unit: "g", color: .red)
-                        NutrientRow(icon: "🥑", value: fat, unit: "g", color: .blue)
-                        NutrientRow(icon: "🍚", value: carbs, unit: "g", color: .orange)
-                    }
-                }
+            Text(name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            ZStack {
+                Circle()
+                    .stroke(Color(UIColor.systemGray5), lineWidth: 5)
+                    .frame(width: 44, height: 44)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .frame(width: 44, height: 44)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.5), value: progress)
+                Text(icon)
+                    .font(.system(size: 18))
             }
-            .padding(.leading, 10)
         }
         .padding(10)
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)  // 影を少し強化
+        .frame(maxWidth: .infinity, minHeight: 120)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(14)
+        .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 
-// 運動ログアイテム
-struct ExerciseLogItem: View {
-    let icon: String
-    let name: String
-    let time: String
-    let caloriesBurned: Int
-    let duration: Int
+// MARK: - 歩数・運動・水カード
+struct ActivityWaterCard: View {
+    @Binding var selectedDate: Date
+    @State private var showWaterSettings = false
+    @AppStorage("waterServingSize") private var waterUnit: Int = 250
+    @ObservedObject private var exerciseLogsManager = ExerciseLogsManager.shared
+    @ObservedObject private var waterLogsManager = WaterLogsManager.shared
+    
+    let steps: Int = 1989
+    let stepsTarget: Int = 10000
+    
+    var waterAmount: Int {
+        waterLogsManager.waterAmount(for: selectedDate)
+    }
+    
+    var stepsCalories: Int {
+        Int(Double(steps) * 0.04)
+    }
+    
+    // ランニング（有酸素）の消費カロリー
+    var runningCalories: Int {
+        exerciseLogsManager.logs(for: selectedDate)
+            .filter { $0.exerciseType == .running }
+            .reduce(0) { $0 + $1.caloriesBurned }
+    }
+    
+    // 無酸素運動（筋トレのみ）の消費カロリー
+    var strengthCalories: Int {
+        exerciseLogsManager.logs(for: selectedDate)
+            .filter { $0.exerciseType == .strength }
+            .reduce(0) { $0 + $1.caloriesBurned }
+    }
+    
+    // その他の運動（表示しないが合計に含む）
+    var otherCalories: Int {
+        exerciseLogsManager.logs(for: selectedDate)
+            .filter { $0.exerciseType != .running && $0.exerciseType != .strength }
+            .reduce(0) { $0 + $1.caloriesBurned }
+    }
+    
+    // 合計消費カロリー（全て含む）
+    var totalCaloriesBurned: Int {
+        stepsCalories + runningCalories + strengthCalories + otherCalories
+    }
+    
+    var stepsProgress: Double { min(Double(steps) / Double(stepsTarget), 1.0) }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // 左側：アイコン
-            Image(systemName: icon)
-                .font(.system(size: 32))
-                .foregroundColor(.white)
-                .frame(width: 70, height: 70)
-                .background(
-                    LinearGradient(  // グラデーション追加
-                        colors: [Color.green, Color.green.opacity(0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            
-            // 中央・右側の情報全体
-            VStack(spacing: 0) {
-                // 上部：名前と時間
-                HStack(alignment: .top) {
-                    Text(name)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Text(time)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.primary)  // グレー → 黒に変更
-                }
-                .padding(.bottom, 6)
-                
-                // 下部：消費カロリーと時間
-                HStack(alignment: .bottom, spacing: 10) {
-                    // 消費カロリー（大きく）
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(.orange)
-                            .offset(y: -6)
-                        
-                        Text("\(caloriesBurned)")
-                            .font(.system(size: 36, weight: .bold))  // 24 → 32
+        VStack(spacing: 8) {
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("歩数")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text("\(steps.formatted())")
+                            .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.primary)
-                            .offset(y: -6)
-                        
+                        Text("/\(stepsTarget.formatted())")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        ZStack {
+                            Circle()
+                                .stroke(Color(UIColor.systemGray4), lineWidth: 8)
+                                .frame(width: 70, height: 70)
+                            Circle()
+                                .trim(from: 0, to: stepsProgress)
+                                .stroke(Color.primary, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                                .frame(width: 70, height: 70)
+                                .rotationEffect(.degrees(-90))
+                            Image(systemName: "figure.walk")
+                                .font(.system(size: 22))
+                                .foregroundColor(.primary)
+                        }
+                        Spacer()
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity)
+                
+                Rectangle()
+                    .fill(Color(UIColor.separator).opacity(0.3))
+                    .frame(width: 1)
+                    .padding(.vertical, 12)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("消費カロリー")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text("\(totalCaloriesBurned)")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.primary)
                         Text("kcal")
-                            .font(.system(size: 18))
-                            .foregroundColor(.gray)
-                            .offset(y: -3)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
                     }
                     
+                    // 3項目のみ表示（歩数、ランニング、無酸素）
+                    VStack(alignment: .leading, spacing: 4) {
+                        // 歩数
+                        HStack(spacing: 4) {
+                            Image(systemName: "figure.walk")
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary)
+                                .frame(width: 14)
+                            Text("歩数")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(stepsCalories) kcal")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // ランニング
+                        HStack(spacing: 4) {
+                            Image(systemName: "figure.run")
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary)
+                                .frame(width: 14)
+                            Text("ランニング")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(runningCalories) kcal")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // 無酸素運動
+                        HStack(spacing: 4) {
+                            Image(systemName: "dumbbell.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.primary)
+                                .frame(width: 14)
+                            Text("無酸素運動")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(strengthCalories) kcal")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.top, 4)
                     Spacer()
-                    
-                    // 運動時間
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(.blue)
-                            .offset(y: -3)
-                        
-                        Text("\(duration)")
-                            .font(.system(size: 24, weight: .bold))  // 20 → 24
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity)
+            }
+            .frame(height: 160)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
+            
+            HStack {
+                Image(systemName: "drop.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("水分")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text("\(waterAmount)")
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.primary)
-                            .offset(y: -3)
-                        
-                        Text("分")
-                            .font(.system(size: 13))
-                            .foregroundColor(.gray)
-                            .offset(y: -3)
+                        Text("ml")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Button { showWaterSettings = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                HStack(spacing: 10) {
+                    Button {
+                        waterLogsManager.removeWater(waterUnit, for: selectedDate)
+                    } label: {
+                        Image(systemName: "minus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(Color(UIColor.label))
+                            .frame(width: 34, height: 34)
+                            .background(Color(UIColor.systemGray5))
+                            .clipShape(Circle())
+                    }
+                    Button {
+                        waterLogsManager.addWater(waterUnit, for: selectedDate)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(Color(UIColor.systemBackground))
+                            .frame(width: 34, height: 34)
+                            .background(Color(UIColor.label))
+                            .clipShape(Circle())
                     }
                 }
             }
-            .padding(.leading, 12)
+            .padding(12)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.primary.opacity(0.05), radius: 5, x: 0, y: 2)
         }
-        .padding(14)
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)  // 影を少し強化
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .sheet(isPresented: $showWaterSettings) {
+            WaterSettingsSheet(servingSize: $waterUnit)
+        }
     }
 }
 
-// 栄養素行（縦並び用）
-struct NutrientRow: View {
-    let icon: String
-    let value: Int
-    let unit: String
-    let color: Color
+// MARK: - 水設定シート
+struct WaterSettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var servingSize: Int
+    @State private var selectedSize: Int = 250
+    let sizes = [100, 150, 200, 250, 500, 750, 1000]
     
     var body: some View {
-        HStack(spacing: 4) {
-            Text(icon)
-                .font(.system(size: 14))
-            Text("\(value)\(unit)")
-                .font(.system(size: 14, weight: .semibold))  // 13 → 14
-                .foregroundColor(color)
+        NavigationStack {
+            VStack(spacing: 20) {
+                HStack {
+                    Text("1回の量")
+                        .font(.system(size: 16, weight: .medium))
+                    Spacer()
+                    Text("\(selectedSize) ml")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                
+                Picker("量を選択", selection: $selectedSize) {
+                    ForEach(sizes, id: \.self) { size in
+                        Text("\(size)").tag(size)
+                    }
+                }
+                .pickerStyle(.wheel)
+                .frame(height: 150)
+                
+                Spacer()
+                
+                HStack(spacing: 12) {
+                    Button { dismiss() } label: {
+                        Text("キャンセル")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(UIColor.tertiarySystemGroupedBackground))
+                            .cornerRadius(12)
+                    }
+                    Button {
+                        servingSize = selectedSize
+                        dismiss()
+                    } label: {
+                        Text("保存")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(Color(UIColor.systemBackground))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(UIColor.label))
+                            .cornerRadius(12)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
+            }
+            .navigationTitle("水分設定")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
         }
+        .onAppear { selectedSize = servingSize }
     }
-}
-
-#Preview {
-    S24_HomeView()
 }

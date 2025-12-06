@@ -9,6 +9,7 @@ build/
 *.ipa
 *.dSYM.zip
 *.dSYM
+*.zip
 
 # Node modules (backend用)
 node_modules/

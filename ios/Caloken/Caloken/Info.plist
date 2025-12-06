@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleGetInfoString</key>
+	<string>Privacy - User Notifications Usage Description</string>
+	<key>CFBundleSignature</key>
+	<string></string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>食事記録のリマインダーや進捗のお知らせを受け取るために通知を使用します。</string>
+</dict>
+</plist>
