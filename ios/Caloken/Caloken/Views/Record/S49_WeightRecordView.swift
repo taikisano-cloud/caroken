@@ -114,8 +114,7 @@ struct S49_WeightRecordView: View {
             userInfo: ["message": "体重 \(String(format: "%.1f", currentWeight))kg を記録しました", "color": Color.green]
         )
         
-        // 即座にホームに戻る
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllWeightScreens, object: nil)
-        dismiss()
     }
 }

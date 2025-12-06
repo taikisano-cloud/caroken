@@ -240,9 +240,8 @@ struct S51_ExerciseDetailView: View {
             userInfo: ["message": message, "color": Color.green]
         )
         
-        // 即座にホームに戻る
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
-        dismiss()
     }
 }
 

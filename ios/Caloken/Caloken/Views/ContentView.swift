@@ -37,6 +37,49 @@ final class AnalyzingManager: ObservableObject {
         }
     }
     
+    // 食事を即座に記録（分析中表示なし）
+    func saveMealInstantly(name: String, calories: Int, protein: Int = 0, fat: Int = 0, carbs: Int = 0, for date: Date) {
+        let mealLog = MealLogEntry(
+            name: name,
+            calories: calories,
+            protein: protein,
+            fat: fat,
+            carbs: carbs,
+            emoji: "🍽️",
+            date: date
+        )
+        MealLogsManager.shared.addLog(mealLog)
+        
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .showHomeToast,
+                object: nil,
+                userInfo: ["message": "\(name)を記録しました", "color": Color.green]
+            )
+            NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
+        }
+    }
+    
+    // 運動を即座に記録（分析中表示なし）
+    func saveExerciseInstantly(name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType = .manual) {
+        let exerciseLog = ExerciseLogEntry(
+            name: name,
+            duration: duration,
+            caloriesBurned: caloriesBurned,
+            exerciseType: exerciseType
+        )
+        ExerciseLogsManager.shared.addLog(exerciseLog)
+        
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .showHomeToast,
+                object: nil,
+                userInfo: ["message": "\(caloriesBurned) kcal を消費として記録しました", "color": Color.green]
+            )
+            NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
+        }
+    }
+    
     // 運動分析開始
     func startExerciseAnalyzing(description: String, duration: Int) {
         let logId = ExerciseLogsManager.shared.addAnalyzingLog(
@@ -193,6 +236,23 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showHomeToast)) { notification in
             handleToastNotification(notification)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .dismissAllMealScreens)) { _ in
+            // 全ての食事関連画面を閉じてホームに戻る
+            navigateToCamera = false
+            navigateToManualRecord = false
+            navigateToSavedMeals = false
+            showRecordMenu = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dismissAllExerciseScreens)) { _ in
+            // 全ての運動関連画面を閉じてホームに戻る
+            navigateToExerciseMenu = false
+            showRecordMenu = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .dismissAllWeightScreens)) { _ in
+            // 全ての体重関連画面を閉じてホームに戻る
+            navigateToWeightRecord = false
+            showRecordMenu = false
+        }
         .onChange(of: navigateToCamera) { if $0 { showRecordMenu = false } }
         .onChange(of: navigateToExerciseMenu) { if $0 { showRecordMenu = false } }
         .onChange(of: navigateToManualRecord) { if $0 { showRecordMenu = false } }
@@ -205,8 +265,7 @@ struct ContentView: View {
             if selectedTab == 0 {
                 S24_HomeView(bottomPadding: tabBarHeight)
             } else {
-                S38_ProgressView()
-                    .padding(.bottom, tabBarHeight)
+                S38_ProgressView(bottomPadding: tabBarHeight)
             }
         }
         .animation(.none, value: selectedTab)

@@ -88,9 +88,8 @@ struct S50_SavedMealView: View {
             userInfo: ["message": "「\(meal.name)」を記録しました", "color": Color.green]
         )
         
-        // 全ての画面を閉じてホームに戻る
+        // 全ての画面を閉じてホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
-        dismiss()
     }
     
     private func deleteMeal(_ meal: SavedMeal) {

@@ -164,9 +164,8 @@ struct S41_RunningView: View {
             userInfo: ["message": "\(exerciseName) \(selectedDuration)分を記録しました", "color": Color.green]
         )
         
-        // 即座にホームに戻る
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
-        dismiss()
     }
 }
 

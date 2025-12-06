@@ -8,6 +8,16 @@ struct S27_1_SettingsView: View {
     @State private var showSignOutAlert: Bool = false
     @State private var navigateToOnboarding: Bool = false
     
+    // 性別表示テキスト
+    private var genderDisplayText: String {
+        switch profileManager.gender {
+        case "Male": return "男性"
+        case "Female": return "女性"
+        case "Other": return "その他"
+        default: return "未設定"
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -33,7 +43,7 @@ struct S27_1_SettingsView: View {
                         NavigationLink {
                             S27_2_ProfileEditView()
                         } label: {
-                            ProfileRow(label: "性別", value: profileManager.gender == "Male" ? "男性" : "女性")
+                            ProfileRow(label: "性別", value: genderDisplayText)
                         }
                         
                         Divider().padding(.leading, 16)

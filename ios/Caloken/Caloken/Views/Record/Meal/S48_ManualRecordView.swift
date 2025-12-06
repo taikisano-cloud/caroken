@@ -131,20 +131,34 @@ struct S48_ManualRecordView: View {
     
     private func startAnalysis() {
         isTextFieldFocused = false
-        isAnalyzing = true
         
-        withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
-            rotation = 360
-        }
+        // モック分析結果を即座に作成
+        let name = String(mealDescription.prefix(20))
+        let calories = Int.random(in: 300...600)
+        let protein = Int.random(in: 15...35)
+        let fat = Int.random(in: 10...25)
+        let carbs = Int.random(in: 30...60)
         
-        // 少し待ってからホームに戻る
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // ホーム画面のログに追加して分析開始
-            AnalyzingManager.shared.startManualMealAnalyzing(description: mealDescription, for: Date())
-            
-            // 即座にホームに戻る
-            NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
-            dismiss()
-        }
+        // 直接ログに追加（分析中状態なし）
+        let mealLog = MealLogEntry(
+            name: name.isEmpty ? "手動入力" : name,
+            calories: calories,
+            protein: protein,
+            fat: fat,
+            carbs: carbs,
+            emoji: "🍽️",
+            date: Date()
+        )
+        MealLogsManager.shared.addLog(mealLog)
+        
+        // ホーム画面でトースト表示
+        NotificationCenter.default.post(
+            name: .showHomeToast,
+            object: nil,
+            userInfo: ["message": "食事を記録しました", "color": Color.green]
+        )
+        
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
+        NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
     }
 }

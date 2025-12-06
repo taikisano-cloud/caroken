@@ -115,9 +115,8 @@ struct S43_ExerciseManualEntryView: View {
             duration: selectedDuration
         )
         
-        // 即座にホームに戻る
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
-        dismiss()
     }
 }
 

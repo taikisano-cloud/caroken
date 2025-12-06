@@ -131,9 +131,8 @@ struct S52_ExerciseManualEntryView: View {
             userInfo: ["message": "\(caloriesBurned) kcal を消費として記録しました", "color": Color.green]
         )
         
-        // 即座にホームに戻る
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
-        dismiss()
     }
 }
 

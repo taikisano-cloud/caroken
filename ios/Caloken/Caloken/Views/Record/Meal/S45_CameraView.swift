@@ -10,6 +10,7 @@ struct S45_CameraView: View {
     @State private var scanMode: ScanMode = .food
     @State private var isFlashOn = false
     @State private var cameraPermissionGranted = false
+    @State private var isCapturing = false  // 撮影中フラグ
     
     @StateObject private var cameraManager = CameraManager()
     
@@ -137,6 +138,8 @@ struct S45_CameraView: View {
                         
                         // 撮影
                         Button(action: {
+                            guard !isCapturing else { return }
+                            isCapturing = true
                             cameraManager.capturePhoto()
                         }) {
                             ZStack {
@@ -144,10 +147,11 @@ struct S45_CameraView: View {
                                     .stroke(Color.white, lineWidth: 4)
                                     .frame(width: 80, height: 80)
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(isCapturing ? Color.gray : Color.white)
                                     .frame(width: 66, height: 66)
                             }
                         }
+                        .disabled(isCapturing)
                         
                         Spacer()
                         

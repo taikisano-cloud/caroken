@@ -12,7 +12,6 @@ struct S46_MealDetailView: View {
     @State private var currentImage: UIImage? = nil
     @State private var quantity: Int = 1
     @State private var isBookmarked: Bool = false
-    @State private var showShareSheet: Bool = false
     @State private var showCamera: Bool = false
     @State private var showBookmarkAlert: Bool = false
     @State private var showDatePicker: Bool = false
@@ -61,9 +60,6 @@ struct S46_MealDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar { toolbarContent }
-        .sheet(isPresented: $showShareSheet) {
-            S47_ShareMealView(result: result, capturedImage: currentImage)
-        }
         .fullScreenCover(isPresented: $showCamera) {
             S45_CameraView()
         }
@@ -381,20 +377,13 @@ struct S46_MealDetailView: View {
         }
     }
     
-    // MARK: - Toolbar
+    // MARK: - Toolbar（シェア機能削除）
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarLeading) {
             Button(action: { dismiss() }) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.primary)
-            }
-        }
-        
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: { showShareSheet = true }) {
-                Image(systemName: "square.and.arrow.up")
                     .foregroundColor(.primary)
             }
         }
@@ -471,8 +460,8 @@ struct S46_MealDetailView: View {
             userInfo: ["message": message, "color": Color.green]
         )
         
+        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
-        dismiss()
     }
     
     private func addToSavedMeals() {
