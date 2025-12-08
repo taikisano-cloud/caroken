@@ -1,8 +1,10 @@
 import Foundation
 import SwiftUI
+import Combine
+import AuthenticationServices
 
 // MARK: - Auth Service
-class AuthService: ObservableObject {
+class AuthService: NSObject, ObservableObject {
     static let shared = AuthService()
     
     // Supabase設定
@@ -12,12 +14,19 @@ class AuthService: ObservableObject {
     // Google OAuth設定
     private let googleClientID = "40088442372-9uphm9n4epvhcvce58qfthn46ak991b5.apps.googleusercontent.com"
     
+    // カスタムURLスキーム
+    private let callbackURLScheme = "com.stellacreation.caloken"
+    
     @Published var isLoggedIn: Bool = false
     @Published var currentUser: AuthUser?
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     
-    private init() {
+    // ASWebAuthenticationSession用
+    private var webAuthSession: ASWebAuthenticationSession?
+    
+    private override init() {
+        super.init()
         // 起動時にセッション確認
         checkSession()
     }
@@ -35,60 +44,98 @@ class AuthService: ObservableObject {
         }
     }
     
-    // MARK: - Google Sign In (OAuth URL方式)
+    // MARK: - Google Sign In (アプリ内ブラウザ)
+    @MainActor
     func signInWithGoogle() async throws {
-        await MainActor.run { isLoading = true }
+        isLoading = true
         
         // SupabaseのOAuth URLを生成
-        let redirectURL = "com.stellacreation.caloken://login-callback"
-        let encodedRedirect = redirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirectURL
-        
-        let authURL = "\(supabaseURL)/auth/v1/authorize?provider=google&redirect_to=\(encodedRedirect)"
-        
-        guard let url = URL(string: authURL) else {
-            await MainActor.run {
-                isLoading = false
-                errorMessage = "無効なURLです"
-            }
+        let redirectURL = "\(callbackURLScheme)://login-callback"
+        guard let encodedRedirect = redirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            isLoading = false
             throw AuthError.invalidURL
         }
         
-        // Safariで認証ページを開く
-        await MainActor.run {
-            UIApplication.shared.open(url)
+        let authURLString = "\(supabaseURL)/auth/v1/authorize?provider=google&redirect_to=\(encodedRedirect)"
+        
+        guard let authURL = URL(string: authURLString) else {
             isLoading = false
+            throw AuthError.invalidURL
+        }
+        
+        // ASWebAuthenticationSessionを使用（アプリ内ブラウザ）
+        return try await withCheckedThrowingContinuation { continuation in
+            webAuthSession = ASWebAuthenticationSession(
+                url: authURL,
+                callbackURLScheme: callbackURLScheme
+            ) { [weak self] callbackURL, error in
+                guard let self = self else { return }
+                
+                Task { @MainActor in
+                    self.isLoading = false
+                    
+                    if let error = error {
+                        if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+                            // ユーザーがキャンセル
+                            continuation.resume(returning: ())
+                            return
+                        }
+                        continuation.resume(throwing: AuthError.signInFailed)
+                        return
+                    }
+                    
+                    guard let callbackURL = callbackURL else {
+                        continuation.resume(throwing: AuthError.invalidResponse)
+                        return
+                    }
+                    
+                    // コールバックURLからトークンを抽出
+                    await self.processOAuthCallback(url: callbackURL)
+                    continuation.resume(returning: ())
+                }
+            }
+            
+            // プレゼンテーションコンテキストを設定
+            webAuthSession?.presentationContextProvider = self
+            webAuthSession?.prefersEphemeralWebBrowserSession = false
+            
+            // 認証セッションを開始
+            webAuthSession?.start()
         }
     }
     
-    // MARK: - Handle OAuth Callback
-    func handleOAuthCallback(url: URL) async {
-        await MainActor.run { isLoading = true }
+    // MARK: - Process OAuth Callback
+    @MainActor
+    private func processOAuthCallback(url: URL) async {
+        isLoading = true
         
         // URLからトークンを抽出
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let fragment = components.fragment else {
-            await MainActor.run {
-                isLoading = false
-                errorMessage = "認証情報が見つかりません"
+        // フラグメント（#以降）またはクエリパラメータから取得
+        var params: [String: String] = [:]
+        
+        // フラグメントをチェック
+        if let fragment = URLComponents(url: url, resolvingAgainstBaseURL: false)?.fragment {
+            fragment.split(separator: "&").forEach { pair in
+                let keyValue = pair.split(separator: "=", maxSplits: 1)
+                if keyValue.count == 2 {
+                    params[String(keyValue[0])] = String(keyValue[1])
+                }
             }
-            return
         }
         
-        // フラグメントからパラメータを解析
-        var params: [String: String] = [:]
-        fragment.split(separator: "&").forEach { pair in
-            let keyValue = pair.split(separator: "=")
-            if keyValue.count == 2 {
-                params[String(keyValue[0])] = String(keyValue[1])
+        // クエリパラメータもチェック
+        if let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
+            for item in queryItems {
+                if let value = item.value {
+                    params[item.name] = value
+                }
             }
         }
         
         guard let accessToken = params["access_token"],
               let refreshToken = params["refresh_token"] else {
-            await MainActor.run {
-                isLoading = false
-                errorMessage = "トークンが見つかりません"
-            }
+            isLoading = false
+            errorMessage = "認証トークンが見つかりません"
             return
         }
         
@@ -96,11 +143,22 @@ class AuthService: ObservableObject {
         UserDefaults.standard.set(accessToken, forKey: "supabase_access_token")
         UserDefaults.standard.set(refreshToken, forKey: "supabase_refresh_token")
         
+        // NetworkManagerにもトークンを設定
+        UserDefaults.standard.set(accessToken, forKey: "accessToken")
+        UserDefaults.standard.set(refreshToken, forKey: "refreshToken")
+        
         // ユーザー情報を取得
         await fetchUser(accessToken: accessToken)
     }
     
+    // MARK: - Handle OAuth Callback (外部からの呼び出し用)
+    @MainActor
+    func handleOAuthCallback(url: URL) async {
+        await processOAuthCallback(url: url)
+    }
+    
     // MARK: - Fetch User
+    @MainActor
     private func fetchUser(accessToken: String) async {
         guard let url = URL(string: "\(supabaseURL)/auth/v1/user") else { return }
         
@@ -119,30 +177,29 @@ class AuthService: ObservableObject {
                 UserDefaults.standard.set(userId, forKey: "supabase_user_id")
                 UserDefaults.standard.set(email, forKey: "supabase_user_email")
                 
-                // NetworkManagerにもトークンを設定
-                if let accessToken = UserDefaults.standard.string(forKey: "supabase_access_token") {
-                    UserDefaults.standard.set(accessToken, forKey: "accessToken")
-                }
+                currentUser = AuthUser(id: userId, email: email)
+                isLoggedIn = true
+                isLoading = false
                 
-                await MainActor.run {
-                    currentUser = AuthUser(id: userId, email: email)
-                    isLoggedIn = true
-                    isLoading = false
+                print("✅ Google Sign In Success")
+                print("   User ID: \(userId)")
+                if let email = email {
+                    print("   Email: \(email)")
                 }
             }
         } catch {
-            await MainActor.run {
-                isLoading = false
-                errorMessage = "ユーザー情報の取得に失敗しました"
-            }
+            isLoading = false
+            errorMessage = "ユーザー情報の取得に失敗しました"
         }
     }
     
     // MARK: - Email Sign Up
+    @MainActor
     func signUp(email: String, password: String) async throws {
-        await MainActor.run { isLoading = true }
+        isLoading = true
         
         guard let url = URL(string: "\(supabaseURL)/auth/v1/signup") else {
+            isLoading = false
             throw AuthError.invalidURL
         }
         
@@ -157,50 +214,7 @@ class AuthService: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AuthError.invalidResponse
-        }
-        
-        if httpResponse.statusCode == 200 {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let accessToken = json["access_token"] as? String,
-               let user = json["user"] as? [String: Any],
-               let userId = user["id"] as? String {
-                
-                UserDefaults.standard.set(accessToken, forKey: "supabase_access_token")
-                UserDefaults.standard.set(userId, forKey: "supabase_user_id")
-                UserDefaults.standard.set(email, forKey: "supabase_user_email")
-                
-                await MainActor.run {
-                    currentUser = AuthUser(id: userId, email: email)
-                    isLoggedIn = true
-                    isLoading = false
-                }
-            }
-        } else {
-            await MainActor.run { isLoading = false }
-            throw AuthError.signUpFailed
-        }
-    }
-    
-    // MARK: - Email Sign In
-    func signIn(email: String, password: String) async throws {
-        await MainActor.run { isLoading = true }
-        
-        guard let url = URL(string: "\(supabaseURL)/auth/v1/token?grant_type=password") else {
-            throw AuthError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
-        
-        let body = ["email": email, "password": password]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
+            isLoading = false
             throw AuthError.invalidResponse
         }
         
@@ -217,19 +231,66 @@ class AuthService: ObservableObject {
                 // NetworkManagerにもトークンを設定
                 UserDefaults.standard.set(accessToken, forKey: "accessToken")
                 
-                await MainActor.run {
-                    currentUser = AuthUser(id: userId, email: email)
-                    isLoggedIn = true
-                    isLoading = false
-                }
+                currentUser = AuthUser(id: userId, email: email)
+                isLoggedIn = true
+                isLoading = false
             }
         } else {
-            await MainActor.run { isLoading = false }
+            isLoading = false
+            throw AuthError.signUpFailed
+        }
+    }
+    
+    // MARK: - Email Sign In
+    @MainActor
+    func signIn(email: String, password: String) async throws {
+        isLoading = true
+        
+        guard let url = URL(string: "\(supabaseURL)/auth/v1/token?grant_type=password") else {
+            isLoading = false
+            throw AuthError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        
+        let body = ["email": email, "password": password]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            isLoading = false
+            throw AuthError.invalidResponse
+        }
+        
+        if httpResponse.statusCode == 200 {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let accessToken = json["access_token"] as? String,
+               let user = json["user"] as? [String: Any],
+               let userId = user["id"] as? String {
+                
+                UserDefaults.standard.set(accessToken, forKey: "supabase_access_token")
+                UserDefaults.standard.set(userId, forKey: "supabase_user_id")
+                UserDefaults.standard.set(email, forKey: "supabase_user_email")
+                
+                // NetworkManagerにもトークンを設定
+                UserDefaults.standard.set(accessToken, forKey: "accessToken")
+                
+                currentUser = AuthUser(id: userId, email: email)
+                isLoggedIn = true
+                isLoading = false
+            }
+        } else {
+            isLoading = false
             throw AuthError.signInFailed
         }
     }
     
     // MARK: - Sign Out
+    @MainActor
     func signOut() {
         UserDefaults.standard.removeObject(forKey: "supabase_access_token")
         UserDefaults.standard.removeObject(forKey: "supabase_refresh_token")
@@ -237,9 +298,22 @@ class AuthService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "supabase_user_email")
         UserDefaults.standard.removeObject(forKey: "accessToken")
         UserDefaults.standard.removeObject(forKey: "refreshToken")
+        UserDefaults.standard.removeObject(forKey: "isLoggedIn")
         
         isLoggedIn = false
         currentUser = nil
+    }
+}
+
+// MARK: - ASWebAuthenticationPresentationContextProviding
+extension AuthService: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // メインウィンドウを返す
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return ASPresentationAnchor()
+        }
+        return window
     }
 }
 
