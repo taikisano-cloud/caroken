@@ -39,6 +39,17 @@ final class ChatMessagesManager: ObservableObject {
         saveMessages()
     }
     
+    // 会話履歴をAPI送信用の形式に変換
+    func chatHistoryForAPI(for date: Date) -> [[String: Any]] {
+        let msgs = messages(for: date)
+        return msgs.suffix(10).map { msg in
+            [
+                "is_user": msg.isUser,
+                "message": msg.text ?? ""
+            ] as [String: Any]
+        }
+    }
+    
     private func saveMessages() {
         var savableData: [String: [[String: Any]]] = [:]
         for (key, messages) in messagesByDate {
@@ -90,6 +101,7 @@ struct CaloChatView: View {
     @State private var isTyping: Bool = false
     @State private var typingTask: Task<Void, Never>?
     @State private var errorMessage: String?
+    @State private var hasScrolledToBottom: Bool = false
     @FocusState private var isTextFieldFocused: Bool
     
     private let chatManager = ChatMessagesManager.shared
@@ -153,6 +165,7 @@ struct CaloChatView: View {
         .enableSwipeBack()
         .onAppear {
             messages = chatManager.messages(for: selectedDate)
+            // 初回表示時のスクロールはchatHistoryView内で行う
         }
         .onDisappear {
             typingTask?.cancel()
@@ -221,6 +234,13 @@ struct CaloChatView: View {
                     }
                 }
                 .padding(16)
+            }
+            .onAppear {
+                // 画面表示時に最新メッセージにスクロール（遅延なし）
+                if !hasScrolledToBottom {
+                    scrollToBottomImmediate(proxy: proxy)
+                    hasScrolledToBottom = true
+                }
             }
             .onChange(of: messages.count) { _, _ in
                 scrollToBottom(proxy: proxy)
@@ -335,6 +355,16 @@ struct CaloChatView: View {
         .background(Color(UIColor.systemGroupedBackground))
     }
     
+    // 即時スクロール（アニメーションなし）
+    private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
+        if isTyping {
+            proxy.scrollTo("typing", anchor: .bottom)
+        } else if let lastMessage = messages.last {
+            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+        }
+    }
+    
+    // アニメーション付きスクロール
     private func scrollToBottom(proxy: ScrollViewProxy) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             withAnimation(.easeOut(duration: 0.2)) {
@@ -378,12 +408,12 @@ struct CaloChatView: View {
         pendingImage = nil
         errorMessage = nil
         
-        // APIを呼び出し
-        sendToAPI(message: userText, image: imageToSend)
+        // APIを呼び出し（会話履歴付き）
+        sendToAPIWithHistory(message: userText, image: imageToSend)
     }
     
-    // MARK: - API呼び出し
-    private func sendToAPI(message: String, image: UIImage?) {
+    // MARK: - API呼び出し（会話履歴対応）
+    private func sendToAPIWithHistory(message: String, image: UIImage?) {
         isTyping = true
         
         typingTask = Task {
@@ -395,12 +425,31 @@ struct CaloChatView: View {
                     imageBase64 = imageData.base64EncodedString()
                 }
                 
-                // API呼び出し
-                let response = try await network.chat(message: message, imageBase64: imageBase64)
+                // 今日の食事情報を取得
+                let todayMeals = getTodayMealsDescription()
+                let todayCalories = getTodayCalories()
+                
+                // 会話履歴を取得（現在のメッセージを除く）
+                let chatHistory = chatManager.chatHistoryForAPI(for: selectedDate)
+                
+                let response: String
+                
+                // 画像がある場合は通常のchat API、ない場合は履歴付きAPI
+                if imageBase64 != nil {
+                    let chatResponse = try await network.chat(message: message, imageBase64: imageBase64)
+                    response = chatResponse.response
+                } else {
+                    response = try await network.sendChatWithHistory(
+                        message: message,
+                        chatHistory: chatHistory,
+                        todayMeals: todayMeals,
+                        todayCalories: todayCalories
+                    )
+                }
                 
                 if !Task.isCancelled {
                     await MainActor.run {
-                        let responseMessage = ChatMessage(isUser: false, text: response.response, image: nil)
+                        let responseMessage = ChatMessage(isUser: false, text: response, image: nil)
                         messages.append(responseMessage)
                         chatManager.addMessage(responseMessage, for: selectedDate)
                         isTyping = false
@@ -417,15 +466,36 @@ struct CaloChatView: View {
                         isTyping = false
                         
                         // デバッグ用にエラーを表示
-                        print("Chat API Error: \(error.localizedDescription)")
+                        print("❌ Chat API Error: \(error.localizedDescription)")
                     }
                 }
             }
         }
     }
     
+    // 今日の食事内容を取得
+    private func getTodayMealsDescription() -> String {
+        let todayLogs = MealLogsManager.shared.logsForDate(Date())
+        
+        if todayLogs.isEmpty {
+            return ""
+        }
+        
+        return todayLogs.map { "\($0.name)(\($0.calories)kcal)" }.joined(separator: ", ")
+    }
+    
+    // 今日の総カロリーを取得
+    private func getTodayCalories() -> Int {
+        return MealLogsManager.shared.totalCalories(for: Date())
+    }
+    
     // MARK: - フォールバック応答（API失敗時）
     private func generateFallbackResponse(for message: String) -> String {
+        // デバッグモードの場合はネットワークエラーの可能性
+        if network.isDebugMode {
+            return "ごめんにゃ😿 サーバーに接続できなかったみたい...もう一度試してほしいにゃ！"
+        }
+        
         // ログインしていない場合
         if !network.isLoggedIn {
             return "ごめんにゃ😿 まだログインしてないみたい...ログインしてからもう一度話しかけてにゃ！"

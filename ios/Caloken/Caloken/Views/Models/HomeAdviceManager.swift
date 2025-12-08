@@ -12,22 +12,6 @@ class HomeAdviceManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
-        // 食事ログの変更を監視
-        NotificationCenter.default.publisher(for: .mealLogDidChange)
-            .debounce(for: .seconds(1.0), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshAdvice()
-            }
-            .store(in: &cancellables)
-        
-        // 運動ログの変更を監視
-        NotificationCenter.default.publisher(for: .exerciseLogDidChange)
-            .debounce(for: .seconds(1.0), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.refreshAdvice()
-            }
-            .store(in: &cancellables)
-        
         // アプリ起動時にアドバイスを取得
         loadCachedAdvice()
     }
@@ -88,25 +72,22 @@ class HomeAdviceManager: ObservableObject {
     }
     
     private func getTodayStats() -> TodayStats {
-        let todayLogs = MealLogsManager.shared.logs.filter { log in
-            Calendar.current.isDateInToday(log.date)
-        }
+        // MealLogsManagerから今日のログを取得
+        let todayLogs = MealLogsManager.shared.logsForDate(Date())
         
-        let calories = todayLogs.reduce(0) { $0 + $1.calories }
-        let protein = todayLogs.reduce(0) { $0 + $1.protein }
-        let fat = todayLogs.reduce(0) { $0 + $1.fat }
-        let carbs = todayLogs.reduce(0) { $0 + $1.carbs }
+        let calories = MealLogsManager.shared.totalCalories(for: Date())
+        let nutrients = MealLogsManager.shared.totalNutrients(for: Date())
         let mealsDescription = todayLogs.map { "\($0.name)(\($0.calories)kcal)" }.joined(separator: ", ")
         
-        // 目標カロリーはUserProfileManagerから取得（なければデフォルト2000）
+        // 目標カロリーはUserProfileManagerから取得
         let goalCalories = UserProfileManager.shared.calorieGoal
         
         return TodayStats(
             calories: calories,
             goalCalories: goalCalories,
-            protein: protein,
-            fat: fat,
-            carbs: carbs,
+            protein: nutrients.protein,
+            fat: nutrients.fat,
+            carbs: nutrients.carbs,
             mealsDescription: mealsDescription,
             mealCount: todayLogs.count
         )
@@ -152,10 +133,4 @@ private struct TodayStats {
     let carbs: Int
     let mealsDescription: String
     let mealCount: Int
-}
-
-// MARK: - Notifications
-extension Notification.Name {
-    static let mealLogDidChange = Notification.Name("mealLogDidChange")
-    static let exerciseLogDidChange = Notification.Name("exerciseLogDidChange")
 }
