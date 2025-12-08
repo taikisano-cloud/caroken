@@ -129,6 +129,7 @@ struct S23_LoginView: View {
             }
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(height: 54)
+            .frame(maxWidth: .infinity)
             .cornerRadius(12)
             .padding(.horizontal, 24)
             .disabled(isSigningIn)
@@ -138,15 +139,22 @@ struct S23_LoginView: View {
                 signInWithGoogle()
             } label: {
                 HStack(spacing: 12) {
-                    Image("google_logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                        .background(
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 24, height: 24)
-                        )
+                    // Googleロゴ（カラフルなG）
+                    ZStack {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 24, height: 24)
+                        
+                        Text("G")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [.red, .yellow, .green, .blue],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
                     
                     Text("Googleで続ける")
                         .font(.system(size: 17, weight: .medium))
