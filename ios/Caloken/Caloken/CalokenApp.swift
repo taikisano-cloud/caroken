@@ -5,9 +5,6 @@ struct CalokenApp: App {
     // ログイン状態を管理（課金完了後にtrue）
     @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
     
-    // AuthServiceを監視
-    @StateObject private var authService = AuthService.shared
-    
     var body: some Scene {
         WindowGroup {
             Group {
@@ -31,7 +28,7 @@ struct CalokenApp: App {
         // カスタムURLスキーム: com.stellacreation.caloken://login-callback
         if url.scheme == "com.stellacreation.caloken" && url.host == "login-callback" {
             Task {
-                await authService.handleOAuthCallback(url: url)
+                await AuthService.shared.handleOAuthCallback(url: url)
             }
         }
     }

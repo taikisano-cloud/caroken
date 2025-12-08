@@ -160,14 +160,21 @@ class AuthService: NSObject, ObservableObject {
     // MARK: - Fetch User
     @MainActor
     private func fetchUser(accessToken: String) async {
+        print("🔄 Fetching user info...")
+        let startTime = Date()
+        
         guard let url = URL(string: "\(supabaseURL)/auth/v1/user") else { return }
         
         var request = URLRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.timeoutInterval = 10 // 10秒タイムアウト
         
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
+            
+            let elapsed = Date().timeIntervalSince(startTime)
+            print("⏱️ User fetch took: \(String(format: "%.2f", elapsed))s")
             
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let userId = json["id"] as? String {
@@ -188,6 +195,8 @@ class AuthService: NSObject, ObservableObject {
                 }
             }
         } catch {
+            let elapsed = Date().timeIntervalSince(startTime)
+            print("❌ User fetch failed after \(String(format: "%.2f", elapsed))s: \(error)")
             isLoading = false
             errorMessage = "ユーザー情報の取得に失敗しました"
         }
