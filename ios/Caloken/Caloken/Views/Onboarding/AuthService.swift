@@ -9,7 +9,7 @@ class AuthService: NSObject, ObservableObject {
     
     // Supabase設定
     private let supabaseURL = "https://ekfcrkbnxkphtkyvozgw.supabase.co"
-    private let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZmNya2JueGtwaHRreXZvemd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM1NDc3NzMsImV4cCI6MjA0OTEyMzc3M30.b6sXKI-wlTIrlVFNgqyUaQ2IKG2tdrmMTRWJB_kNy5g"
+    private let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVrZmNya2JueGtwaHRreXZvemd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNjgzODEsImV4cCI6MjA4MDc0NDM4MX0.YjlRR95qCqWkANzi1-8yDAEfmhggEz-myg8emj3bYBo"
     
     // Google OAuth設定
     private let googleClientID = "40088442372-9uphm9n4epvhcvce58qfthn46ak991b5.apps.googleusercontent.com"
@@ -171,28 +171,46 @@ class AuthService: NSObject, ObservableObject {
         request.timeoutInterval = 10 // 10秒タイムアウト
         
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             
             let elapsed = Date().timeIntervalSince(startTime)
             print("⏱️ User fetch took: \(String(format: "%.2f", elapsed))s")
             
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let userId = json["id"] as? String {
+            // HTTPステータスコードを確認
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📡 HTTP Status: \(httpResponse.statusCode)")
+            }
+            
+            // レスポンスデータを確認
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("📦 Response: \(jsonString.prefix(500))")
+            }
+            
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("📋 JSON keys: \(json.keys)")
                 
-                let email = json["email"] as? String
-                
-                UserDefaults.standard.set(userId, forKey: "supabase_user_id")
-                UserDefaults.standard.set(email, forKey: "supabase_user_email")
-                
-                currentUser = AuthUser(id: userId, email: email)
-                isLoggedIn = true
-                isLoading = false
-                
-                print("✅ Google Sign In Success")
-                print("   User ID: \(userId)")
-                if let email = email {
-                    print("   Email: \(email)")
+                if let userId = json["id"] as? String {
+                    let email = json["email"] as? String
+                    
+                    UserDefaults.standard.set(userId, forKey: "supabase_user_id")
+                    UserDefaults.standard.set(email, forKey: "supabase_user_email")
+                    
+                    currentUser = AuthUser(id: userId, email: email)
+                    isLoggedIn = true
+                    isLoading = false
+                    
+                    print("✅ Google Sign In Success")
+                    print("   User ID: \(userId)")
+                    if let email = email {
+                        print("   Email: \(email)")
+                    }
+                } else {
+                    print("❌ No 'id' field in JSON")
+                    isLoading = false
                 }
+            } else {
+                print("❌ Failed to parse JSON")
+                isLoading = false
             }
         } catch {
             let elapsed = Date().timeIntervalSince(startTime)
