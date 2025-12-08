@@ -8,6 +8,7 @@ struct S46_MealDetailView: View {
     var existingLogDate: Date? = nil
     var isFromLog: Bool = false
     var isFromManualEntry: Bool = false
+    var hideBookmark: Bool = false
     
     @State private var currentImage: UIImage? = nil
     @State private var quantity: Int = 1
@@ -160,8 +161,9 @@ struct S46_MealDetailView: View {
     // MARK: - 料理名セクション
     private var mealNameSection: some View {
         HStack {
-            // ブックマークボタン（常に表示）
-            bookmarkButton
+            if !hideBookmark {
+                bookmarkButton
+            }
             
             TextField("料理名", text: $editedMealName)
                 .font(.system(size: 24, weight: .bold))
@@ -376,7 +378,7 @@ struct S46_MealDetailView: View {
         }
     }
     
-    // MARK: - Toolbar（シェア機能削除）
+    // MARK: - Toolbar
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarLeading) {
@@ -423,6 +425,8 @@ struct S46_MealDetailView: View {
         
         if isEditMode {
             checkIfAlreadySaved()
+        } else {
+            isBookmarked = false
         }
     }
     
@@ -459,13 +463,11 @@ struct S46_MealDetailView: View {
             userInfo: ["message": message, "color": Color.green]
         )
         
-        // 全ての食事画面を閉じる通知を送信
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
-        
-        // この画面を閉じる
         dismiss()
     }
     
+    // 画像も含めて保存
     private func addToSavedMeals() {
         let mealName = getMealName()
         let savedMeal = SavedMeal(
@@ -474,7 +476,8 @@ struct S46_MealDetailView: View {
             protein: editedProtein * Double(quantity),
             fat: editedFat * Double(quantity),
             carbs: editedCarbs * Double(quantity),
-            emoji: selectEmoji()
+            emoji: selectEmoji(),
+            image: currentImage  // 画像を渡す
         )
         SavedMealsManager.shared.addMeal(savedMeal)
     }

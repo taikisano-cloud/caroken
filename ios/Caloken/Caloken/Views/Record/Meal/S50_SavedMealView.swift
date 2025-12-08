@@ -46,7 +46,6 @@ struct S50_SavedMealView: View {
             }
         }
         .enableSwipeBack()
-        // ページ遷移（navigationDestination）
         .navigationDestination(isPresented: $showMealDetail) {
             if let meal = selectedMeal {
                 S46_MealDetailView(
@@ -62,11 +61,12 @@ struct S50_SavedMealView: View {
                         mealImage: nil,
                         characterComment: "\(meal.name)だね！\nおいしそう〜🍴"
                     ),
-                    isFromLog: true
+                    capturedImage: meal.image,  // 保存された画像を渡す
+                    isFromLog: true,
+                    hideBookmark: true
                 )
             }
         }
-        .enableSwipeBack()
     }
     
     private func recordMeal(_ meal: SavedMeal) {
@@ -77,18 +77,16 @@ struct S50_SavedMealView: View {
             fat: Int(meal.fat),
             carbs: Int(meal.carbs),
             emoji: meal.emoji,
-            image: nil
+            image: meal.image  // 画像も含めて記録
         )
         MealLogsManager.shared.addLog(mealLog)
         
-        // ホーム画面でトースト表示
         NotificationCenter.default.post(
             name: .showHomeToast,
             object: nil,
             userInfo: ["message": "「\(meal.name)」を記録しました", "color": Color.green]
         )
         
-        // 全ての画面を閉じてホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllMealScreens, object: nil)
     }
     
@@ -97,7 +95,7 @@ struct S50_SavedMealView: View {
     }
 }
 
-// MARK: - 保存した食事カード
+// MARK: - 保存した食事カード（画像表示対応）
 struct SavedMealCard: View {
     let meal: SavedMeal
     let onTap: () -> Void
@@ -109,10 +107,19 @@ struct SavedMealCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.orange.opacity(0.2))
-                    .frame(width: 70, height: 70)
-                    .overlay(Text(meal.emoji).font(.system(size: 32)))
+                // 画像またはEmoji表示
+                if let image = meal.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 70, height: 70)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.orange.opacity(0.2))
+                        .frame(width: 70, height: 70)
+                        .overlay(Text(meal.emoji).font(.system(size: 32)))
+                }
                 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(meal.name)
@@ -140,12 +147,14 @@ struct SavedMealCard: View {
                 Spacer(minLength: 8)
                 
                 VStack(spacing: 8) {
+                    // 記録ボタン（+）
                     Button(action: onRecord) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 32))
                             .foregroundColor(.orange)
                     }
                     
+                    // 削除ボタン（ゴミ箱）
                     Button(action: { showDeleteAlert = true }) {
                         Image(systemName: "trash")
                             .font(.system(size: 14))

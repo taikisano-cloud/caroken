@@ -26,13 +26,13 @@ final class ChatMessagesManager: ObservableObject {
         if let messages = messagesByDate[key], !messages.isEmpty {
             return messages
         }
-        return [ChatMessage(isUser: false, text: "こんにちは！カロちゃんだにゃ🐱\n今日の食事や運動について何でも聞いてね！", image: nil)]
+        return []
     }
     
     func addMessage(_ message: ChatMessage, for date: Date) {
         let key = dateKey(for: date)
         if messagesByDate[key] == nil {
-            messagesByDate[key] = [ChatMessage(isUser: false, text: "こんにちは！カロちゃんだにゃ🐱\n今日の食事や運動について何でも聞いてね！", image: nil)]
+            messagesByDate[key] = []
         }
         messagesByDate[key]?.append(message)
         objectWillChange.send()
@@ -47,7 +47,6 @@ final class ChatMessagesManager: ObservableObject {
                     "isUser": msg.isUser,
                     "text": msg.text ?? ""
                 ]
-                // 画像をBase64でエンコードして保存
                 if let image = msg.image,
                    let imageData = image.jpegData(compressionQuality: 0.5) {
                     dict["imageBase64"] = imageData.base64EncodedString()
@@ -63,7 +62,6 @@ final class ChatMessagesManager: ObservableObject {
         for (key, messagesData) in data {
             messagesByDate[key] = messagesData.map { dict in
                 var image: UIImage? = nil
-                // Base64から画像を復元
                 if let base64String = dict["imageBase64"] as? String,
                    let imageData = Data(base64Encoded: base64String) {
                     image = UIImage(data: imageData)
@@ -78,7 +76,6 @@ final class ChatMessagesManager: ObservableObject {
     }
 }
 
-// 文字数制限
 private let maxCharacterCount = 1000
 
 // MARK: - カロちゃんチャット画面
@@ -89,16 +86,20 @@ struct CaloChatView: View {
     @State private var messageText = ""
     @State private var messages: [ChatMessage] = []
     @State private var selectedItem: PhotosPickerItem?
-    @State private var pendingImage: UIImage? = nil  // 送信待ち画像
+    @State private var pendingImage: UIImage? = nil
     @State private var isTyping: Bool = false
     @State private var typingTask: Task<Void, Never>?
+    @FocusState private var isTextFieldFocused: Bool
     
     private let chatManager = ChatMessagesManager.shared
-    private let responseTimeout: TimeInterval = 10.0  // タイムアウト10秒
+    private let responseTimeout: TimeInterval = 10.0
     
-    // 送信可能かどうか
     private var canSend: Bool {
         !isTyping && (!messageText.isEmpty || pendingImage != nil)
+    }
+    
+    private var hasMessages: Bool {
+        !messages.isEmpty
     }
     
     var body: some View {
@@ -114,120 +115,14 @@ struct CaloChatView: View {
             .padding(.vertical, 8)
             .background(Color(UIColor.systemGroupedBackground))
             
-            // チャットメッセージ一覧
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(messages) { message in
-                            ChatBubble(message: message)
-                                .id(message.id)
-                        }
-                        
-                        // タイピング中のインジケーター
-                        if isTyping {
-                            TypingIndicator()
-                                .id("typing")
-                        }
-                    }
-                    .padding(16)
-                }
-                .onChange(of: messages.count) { _, _ in
-                    scrollToBottom(proxy: proxy)
-                }
-                .onChange(of: isTyping) { _, _ in
-                    scrollToBottom(proxy: proxy)
-                }
+            if hasMessages {
+                chatHistoryView
+            } else {
+                initialView
             }
             
-            // 入力エリア（角丸）
-            VStack(spacing: 8) {
-                // 選択画像プレビュー
-                if let pendingImage = pendingImage {
-                    HStack {
-                        Image(uiImage: pendingImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 80, height: 80)
-                            .cornerRadius(12)
-                            .clipped()
-                        
-                        Spacer()
-                        
-                        Button {
-                            withAnimation {
-                                self.pendingImage = nil
-                            }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 12)
-                }
-                
-                // 文字数カウンター（入力中のみ表示）
-                if !messageText.isEmpty {
-                    HStack {
-                        Spacer()
-                        Text("\(messageText.count)/\(maxCharacterCount)")
-                            .font(.system(size: 11))
-                            .foregroundColor(messageText.count > maxCharacterCount ? .red : .secondary)
-                    }
-                    .padding(.horizontal, 16)
-                }
-                
-                // 入力欄
-                HStack(spacing: 12) {
-                    PhotosPicker(selection: $selectedItem, matching: .images) {
-                        Image(systemName: pendingImage == nil ? "photo" : "photo.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(pendingImage == nil ? .secondary : .orange)
-                    }
-                    .disabled(isTyping || pendingImage != nil)  // 1枚のみ
-                    .onChange(of: selectedItem) { _, newItem in
-                        handleImageSelection(newItem)
-                    }
-                    
-                    TextField("メッセージを入力...", text: $messageText)
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(Color(UIColor.tertiarySystemGroupedBackground))
-                        .cornerRadius(20)
-                        .disabled(isTyping)
-                        .submitLabel(.send)
-                        .onSubmit {
-                            if canSend {
-                                sendMessage()
-                            }
-                        }
-                        .onChange(of: messageText) { _, newValue in
-                            // 文字数制限
-                            if newValue.count > maxCharacterCount {
-                                messageText = String(newValue.prefix(maxCharacterCount))
-                            }
-                        }
-                    
-                    Button {
-                        sendMessage()
-                    } label: {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                            .background(canSend ? Color.orange : Color.gray)
-                            .clipShape(Circle())
-                    }
-                    .disabled(!canSend)
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
-            }
-            .background(
-                RoundedCornerShape(corners: [.topLeft, .topRight], radius: 20)
-                    .fill(Color(UIColor.secondarySystemGroupedBackground))
-            )
+            // 入力エリア（チャット欄と一体化）
+            inputArea
         }
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("カロちゃんに相談")
@@ -254,18 +149,6 @@ struct CaloChatView: View {
         }
     }
     
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
-                if isTyping {
-                    proxy.scrollTo("typing", anchor: .bottom)
-                } else if let lastMessage = messages.last {
-                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                }
-            }
-        }
-    }
-    
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
@@ -280,6 +163,180 @@ struct CaloChatView: View {
         }
     }
     
+    private var initialView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            if UIImage(named: "caloken_character") != nil {
+                Image("caloken_character")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+            } else {
+                Circle()
+                    .fill(Color.orange.opacity(0.2))
+                    .frame(width: 80, height: 80)
+                    .overlay(Text("🐱").font(.system(size: 40)))
+            }
+            
+            VStack(spacing: 8) {
+                Text("カロちゃんに相談")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.primary)
+                
+                Text("食事や運動について\n何でも聞いてね！")
+                    .font(.system(size: 15))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Spacer()
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
+    
+    private var chatHistoryView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(messages) { message in
+                        ChatBubble(message: message)
+                            .id(message.id)
+                    }
+                    
+                    if isTyping {
+                        TypingIndicator()
+                            .id("typing")
+                    }
+                }
+                .padding(16)
+            }
+            .onChange(of: messages.count) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: isTyping) { _, _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: isTextFieldFocused) { _, focused in
+                if focused {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+        }
+    }
+    
+    // MARK: - 入力エリア（チャット欄と完全一体化・角丸なし）
+    private var inputArea: some View {
+        VStack(spacing: 0) {
+            // 区切り線
+            Divider()
+            
+            // 選択画像プレビュー
+            if let pendingImage = pendingImage {
+                HStack {
+                    Image(uiImage: pendingImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 80, height: 80)
+                        .cornerRadius(12)
+                        .clipped()
+                    
+                    Spacer()
+                    
+                    Button {
+                        withAnimation {
+                            self.pendingImage = nil
+                        }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            }
+            
+            // 文字数カウンター
+            if !messageText.isEmpty {
+                HStack {
+                    Spacer()
+                    Text("\(messageText.count)/\(maxCharacterCount)")
+                        .font(.system(size: 11))
+                        .foregroundColor(messageText.count > maxCharacterCount ? .red : .secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            }
+            
+            // 入力欄（角丸なしのシンプルなデザイン）
+            HStack(spacing: 12) {
+                // 画像添付ボタン
+                PhotosPicker(selection: $selectedItem, matching: .images) {
+                    Image(systemName: pendingImage == nil ? "plus" : "photo.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(pendingImage == nil ? .secondary : .orange)
+                        .frame(width: 36, height: 36)
+                }
+                .disabled(isTyping || pendingImage != nil)
+                .onChange(of: selectedItem) { _, newItem in
+                    handleImageSelection(newItem)
+                }
+                
+                // テキスト入力フィールド（シンプルな角丸のみ）
+                TextField("カロちゃんに相談", text: $messageText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 16))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(20)
+                    .focused($isTextFieldFocused)
+                    .disabled(isTyping)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        if canSend {
+                            sendMessage()
+                        }
+                    }
+                    .onChange(of: messageText) { _, newValue in
+                        if newValue.count > maxCharacterCount {
+                            messageText = String(newValue.prefix(maxCharacterCount))
+                        }
+                    }
+                
+                // 送信ボタン
+                Button {
+                    sendMessage()
+                } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(canSend ? Color.orange : Color.gray.opacity(0.5))
+                        .clipShape(Circle())
+                }
+                .disabled(!canSend)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(Color(UIColor.systemGroupedBackground))
+    }
+    
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.2)) {
+                if isTyping {
+                    proxy.scrollTo("typing", anchor: .bottom)
+                } else if let lastMessage = messages.last {
+                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                }
+            }
+        }
+    }
+    
     private func handleImageSelection(_ newItem: PhotosPickerItem?) {
         guard let newItem = newItem else { return }
         
@@ -287,7 +344,6 @@ struct CaloChatView: View {
             if let data = try? await newItem.loadTransferable(type: Data.self),
                let uiImage = UIImage(data: data) {
                 await MainActor.run {
-                    // 画像を送信待ちにセット（すぐには送信しない）
                     withAnimation {
                         pendingImage = uiImage
                     }
@@ -298,10 +354,8 @@ struct CaloChatView: View {
     }
     
     private func sendMessage() {
-        // テキストも画像もない場合は送信しない
         guard !messageText.isEmpty || pendingImage != nil else { return }
         
-        // メッセージを作成（テキストと画像の両方を含む可能性あり）
         let textToSend = messageText.isEmpty ? nil : messageText
         let imageToSend = pendingImage
         
@@ -309,7 +363,6 @@ struct CaloChatView: View {
         messages.append(userMessage)
         chatManager.addMessage(userMessage, for: selectedDate)
         
-        // 入力内容をクリア
         let userText = messageText.isEmpty ? "画像が送信されました" : messageText
         messageText = ""
         pendingImage = nil
@@ -322,9 +375,7 @@ struct CaloChatView: View {
         
         typingTask = Task {
             do {
-                // タイムアウト付きで応答を待つ
                 try await withTimeout(seconds: responseTimeout) {
-                    // 実際のAI応答をシミュレート（1〜2秒）
                     try await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
                 }
                 
@@ -338,7 +389,6 @@ struct CaloChatView: View {
                     }
                 }
             } catch {
-                // タイムアウトまたはキャンセル
                 if !Task.isCancelled {
                     await MainActor.run {
                         let errorMessage = ChatMessage(isUser: false, text: "ごめんにゃ😿 応答に時間がかかりすぎたにゃ...もう一度試してね！", image: nil)
@@ -394,7 +444,6 @@ struct TypingIndicator: View {
     
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            // カロちゃんのアイコン
             if UIImage(named: "caloken_character") != nil {
                 Image("caloken_character")
                     .resizable()
@@ -443,7 +492,7 @@ struct ChatMessage: Identifiable {
     let image: UIImage?
 }
 
-// MARK: - チャット吹き出し
+// MARK: - チャット吹き出し（長押しメニュー対応）
 struct ChatBubble: View {
     let message: ChatMessage
     
@@ -466,10 +515,17 @@ struct ChatBubble: View {
                             .padding(12)
                             .background(Color.orange)
                             .cornerRadius(16)
+                            .contextMenu {
+                                Button {
+                                    UIPasteboard.general.string = text
+                                } label: {
+                                    Label("コピー", systemImage: "doc.on.doc")
+                                }
+                            }
+                            .textSelection(.enabled)
                     }
                 }
             } else {
-                // カロちゃんのアイコン
                 if UIImage(named: "caloken_character") != nil {
                     Image("caloken_character")
                         .resizable()
@@ -495,6 +551,14 @@ struct ChatBubble: View {
                             .padding(12)
                             .background(Color(UIColor.secondarySystemGroupedBackground))
                             .cornerRadius(16)
+                            .contextMenu {
+                                Button {
+                                    UIPasteboard.general.string = text
+                                } label: {
+                                    Label("コピー", systemImage: "doc.on.doc")
+                                }
+                            }
+                            .textSelection(.enabled)
                     }
                 }
                 Spacer()
@@ -512,20 +576,5 @@ struct ChatBubbleArrowLeft: Shape {
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.closeSubpath()
         return path
-    }
-}
-
-// MARK: - 上だけ角丸のShape（チャット用）
-private struct RoundedCornerShape: Shape {
-    var corners: UIRectCorner
-    var radius: CGFloat
-    
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: corners,
-            cornerRadii: CGSize(width: radius, height: radius)
-        )
-        return Path(path.cgPath)
     }
 }

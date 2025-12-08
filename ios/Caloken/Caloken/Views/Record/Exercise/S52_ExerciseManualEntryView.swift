@@ -106,13 +106,8 @@ struct S52_ExerciseManualEntryView: View {
                 .presentationDetents([.height(280)])
                 .presentationDragIndicator(.visible)
         }
-        .onAppear {
-            // 画面表示時に自動でピッカーを表示
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                showCaloriesPicker = true
-            }
-        }
         .enableSwipeBack()
+        // 自動フォーカス（onAppear）を削除
     }
     
     private func saveManualEntry() {

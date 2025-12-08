@@ -11,8 +11,6 @@ struct S27_4_NotificationSettingsView: View {
     @State private var weightReminderEnabled: Bool = true
     @State private var weightReminderTime: Date = Calendar.current.date(from: DateComponents(hour: 7, minute: 0)) ?? Date()
     
-    @State private var weeklyReport: Bool = false
-    
     var body: some View {
         Form {
             // 食事リマインダー
@@ -79,15 +77,6 @@ struct S27_4_NotificationSettingsView: View {
                 Text("体重リマインダー")
             } footer: {
                 Text("毎日指定した時間に体重記録のリマインダーを送信します")
-            }
-            
-            // 週間レポート
-            Section {
-                Toggle("週間レポート", isOn: $weeklyReport)
-            } header: {
-                Text("レポート")
-            } footer: {
-                Text("毎週月曜日に1週間の振り返りレポートを送信します")
             }
         }
         .navigationTitle("通知設定")

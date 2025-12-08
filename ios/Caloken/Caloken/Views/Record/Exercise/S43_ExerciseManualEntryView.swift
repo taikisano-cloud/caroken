@@ -12,30 +12,46 @@ struct S43_ExerciseManualEntryView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 20) {
+                    // 運動内容入力（競合アプリスタイル）
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("どんな運動をしましたか？")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                         
-                        TextField("例：ヨガ、水泳、サイクリング、ダンスなど", text: $exerciseDescription)
-                            .font(.system(size: 16))
-                            .foregroundColor(.primary)
-                            .padding(16)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
-                            .cornerRadius(12)
-                            .focused($isDescriptionFocused)
-                            .submitLabel(.send)
-                            .onSubmit {
-                                if !exerciseDescription.isEmpty {
-                                    saveExercise()
-                                }
+                        // 競合アプリスタイルのテキストフィールド
+                        ZStack(alignment: .topLeading) {
+                            if exerciseDescription.isEmpty {
+                                Text("例：ヨガ、水泳、サイクリング、ダンスなど")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(Color(UIColor.placeholderText))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 14)
                             }
+                            
+                            TextField("", text: $exerciseDescription)
+                                .font(.system(size: 15))
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 14)
+                                .focused($isDescriptionFocused)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    isDescriptionFocused = false
+                                }
+                        }
+                        .background(Color(UIColor.secondarySystemBackground))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.green, lineWidth: 1.5)
+                        )
                     }
                     
-                    VStack(alignment: .leading, spacing: 12) {
+                    // 運動時間
+                    VStack(alignment: .leading, spacing: 8) {
                         Text("運動時間")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                         
                         Button(action: { showDurationPicker = true }) {
@@ -43,57 +59,55 @@ struct S43_ExerciseManualEntryView: View {
                                 Image(systemName: "clock")
                                     .foregroundColor(.green)
                                 Text("\(selectedDuration)分")
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(.primary)
                                 Spacer()
                                 Image(systemName: "chevron.right")
                                     .foregroundColor(.secondary)
+                                    .font(.system(size: 14))
                             }
-                            .padding(16)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
-                            .cornerRadius(12)
+                            .padding(14)
+                            .background(Color(UIColor.secondarySystemBackground))
+                            .cornerRadius(10)
                         }
                     }
                     
                     // ヒント
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "lightbulb.fill")
                             .foregroundColor(.yellow)
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                         
                         Text("運動の種類と時間を細かく入力するとより正確にカロリーを計算できます")
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }
-                    .padding(16)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.yellow.opacity(0.15))
-                    .cornerRadius(12)
+                    .background(Color.yellow.opacity(0.12))
+                    .cornerRadius(10)
                 }
                 .padding(20)
             }
             
-            // キーボード上のボタンエリア（角丸）
+            // ボタンエリア
             VStack(spacing: 0) {
                 Button(action: { saveExercise() }) {
                     Text("記録する")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(exerciseDescription.isEmpty ? Color(UIColor.systemGray3) : Color.green)
-                        .cornerRadius(14)
+                        .cornerRadius(25)
                 }
                 .disabled(exerciseDescription.isEmpty)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
             }
-            .background(
-                RoundedCornerShape(corners: [.topLeft, .topRight], radius: 20)
-                    .fill(Color(UIColor.secondarySystemGroupedBackground))
-            )
+            .background(Color(UIColor.systemBackground))
         }
-        .background(Color(UIColor.systemGroupedBackground))
+        .background(Color(UIColor.systemBackground))
         .navigationTitle("その他の運動")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -113,13 +127,8 @@ struct S43_ExerciseManualEntryView: View {
             )
             .presentationDetents([.height(300)])
         }
-        .onAppear {
-            // 画面表示時にテキストフィールドにフォーカス
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isDescriptionFocused = true
-            }
-        }
         .enableSwipeBack()
+        // 自動フォーカスを削除
     }
     
     private func saveExercise() {
@@ -129,7 +138,6 @@ struct S43_ExerciseManualEntryView: View {
             duration: selectedDuration
         )
         
-        // 即座にホームに戻る（通知だけでdismissは呼ばない）
         NotificationCenter.default.post(name: .dismissAllExerciseScreens, object: nil)
     }
 }
@@ -174,20 +182,5 @@ struct ExerciseDurationPickerSheet: View {
         .onAppear {
             tempDuration = selectedDuration
         }
-    }
-}
-
-// MARK: - 上だけ角丸のShape
-private struct RoundedCornerShape: Shape {
-    var corners: UIRectCorner
-    var radius: CGFloat
-    
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: corners,
-            cornerRadii: CGSize(width: radius, height: radius)
-        )
-        return Path(path.cgPath)
     }
 }
