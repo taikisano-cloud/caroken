@@ -72,12 +72,9 @@ class HomeAdviceManager: ObservableObject {
     }
     
     private func getTodayStats() -> TodayStats {
-        // MealLogsManagerから今日のログを取得
-        let todayLogs = MealLogsManager.shared.logsForDate(Date())
-        
+        // 既存のMealLogsManagerのAPIを使用
         let calories = MealLogsManager.shared.totalCalories(for: Date())
         let nutrients = MealLogsManager.shared.totalNutrients(for: Date())
-        let mealsDescription = todayLogs.map { "\($0.name)(\($0.calories)kcal)" }.joined(separator: ", ")
         
         // 目標カロリーはUserProfileManagerから取得
         let goalCalories = UserProfileManager.shared.calorieGoal
@@ -88,8 +85,8 @@ class HomeAdviceManager: ObservableObject {
             protein: nutrients.protein,
             fat: nutrients.fat,
             carbs: nutrients.carbs,
-            mealsDescription: mealsDescription,
-            mealCount: todayLogs.count
+            mealsDescription: calories > 0 ? "今日の摂取: \(calories)kcal" : "",
+            mealCount: calories > 0 ? 1 : 0  // 簡易的にカロリーがあれば1
         )
     }
     

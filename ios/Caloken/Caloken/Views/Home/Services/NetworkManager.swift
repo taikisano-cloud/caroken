@@ -277,6 +277,72 @@ class NetworkManager: ObservableObject {
         throw NetworkError.invalidResponse
     }
     
+    // MARK: - ユーザーコンテキスト対応チャット（フル機能）
+    func sendChatWithUserContext(
+        message: String,
+        imageBase64: String?,
+        chatHistory: [[String: Any]],
+        userContext: [String: Any]
+    ) async throws -> String {
+        let endpoint = isDebugMode ? "/ai/chat/test" : "/ai/chat"
+        
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if !isDebugMode, let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // リクエストボディを構築
+        var body: [String: Any] = [
+            "message": message,
+            "chat_history": chatHistory,
+            "user_context": userContext
+        ]
+        
+        // 画像があれば追加
+        if let imageBase64 = imageBase64 {
+            body["image_base64"] = imageBase64
+        }
+        
+        // デバッグ用ログ
+        print("📤 Sending chat with user context:")
+        print("  - Message: \(message)")
+        print("  - Has image: \(imageBase64 != nil)")
+        print("  - Chat history count: \(chatHistory.count)")
+        print("  - User context: \(userContext)")
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // レスポンスのデバッグログ
+        if let httpResponse = response as? HTTPURLResponse {
+            print("📡 HTTP Status: \(httpResponse.statusCode)")
+        }
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ Error response: \(errorString)")
+            }
+            throw NetworkError.invalidResponse
+        }
+        
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let responseText = json["response"] as? String {
+            print("✅ AI Response received: \(responseText.prefix(100))...")
+            return responseText
+        }
+        
+        throw NetworkError.invalidResponse
+    }
+    
     // MARK: - ホームアドバイス取得
     func getHomeAdvice(
         todayCalories: Int,

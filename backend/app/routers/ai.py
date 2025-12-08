@@ -18,6 +18,7 @@ class TestChatRequest(BaseModel):
     image_base64: str | None = None
     chat_history: list | None = None  # 会話履歴
     today_meals: str | None = None    # 今日食べたもの
+    user_context: dict | None = None  # ユーザー情報（性別、年齢、目標等）
 
 
 class TestChatResponse(BaseModel):
@@ -161,13 +162,22 @@ async def chat_test(request: TestChatRequest):
     開発/デバッグ用途のみ
     """
     try:
-        # テスト用のユーザーコンテキスト
-        user_context = {
-            "today_calories": 1200,
-            "goal_calories": 2000,
-            "today_exercise": 150,
-            "today_meals": request.today_meals or ""
-        }
+        # ユーザーコンテキストを構築（リクエストから受け取るか、デフォルト値を使用）
+        if request.user_context:
+            user_context = request.user_context
+            # today_mealsがあれば追加
+            if request.today_meals:
+                user_context["today_meals"] = request.today_meals
+        else:
+            # デフォルトのコンテキスト
+            user_context = {
+                "today_calories": 1200,
+                "goal_calories": 2000,
+                "today_exercise": 150,
+                "today_meals": request.today_meals or ""
+            }
+        
+        print(f"📥 Chat request with user context: {user_context}")
         
         # AIレスポンスを生成（会話履歴を渡す）
         ai_response = await gemini_service.chat(
@@ -180,6 +190,7 @@ async def chat_test(request: TestChatRequest):
         return TestChatResponse(response=ai_response)
         
     except Exception as e:
+        print(f"❌ Chat error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

@@ -106,6 +106,7 @@ struct CaloChatView: View {
     
     private let chatManager = ChatMessagesManager.shared
     private let network = NetworkManager.shared
+    private let profileManager = UserProfileManager.shared
     
     private var canSend: Bool {
         !isTyping && (!messageText.isEmpty || pendingImage != nil)
@@ -121,7 +122,7 @@ struct CaloChatView: View {
             HStack {
                 Spacer()
                 Text(formatDate(selectedDate))
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
                 Spacer()
             }
@@ -137,7 +138,7 @@ struct CaloChatView: View {
             // エラーメッセージ
             if let error = errorMessage {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundColor(.red)
                     .padding(.horizontal)
                     .padding(.vertical, 4)
@@ -165,7 +166,6 @@ struct CaloChatView: View {
         .enableSwipeBack()
         .onAppear {
             messages = chatManager.messages(for: selectedDate)
-            // 初回表示時のスクロールはchatHistoryView内で行う
         }
         .onDisappear {
             typingTask?.cancel()
@@ -208,7 +208,7 @@ struct CaloChatView: View {
                     .foregroundColor(.primary)
                 
                 Text("食事や運動について\n何でも聞いてね！")
-                    .font(.system(size: 15))
+                    .font(.system(size: 16))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -222,7 +222,7 @@ struct CaloChatView: View {
     private var chatHistoryView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 16) {
                     ForEach(messages) { message in
                         ChatBubble(message: message)
                             .id(message.id)
@@ -236,7 +236,7 @@ struct CaloChatView: View {
                 .padding(16)
             }
             .onAppear {
-                // 画面表示時に最新メッセージにスクロール（遅延なし）
+                // 画面表示時に最新メッセージにスクロール
                 if !hasScrolledToBottom {
                     scrollToBottomImmediate(proxy: proxy)
                     hasScrolledToBottom = true
@@ -256,10 +256,9 @@ struct CaloChatView: View {
         }
     }
     
-    // MARK: - 入力エリア（チャット欄と完全一体化・角丸なし）
+    // MARK: - 入力エリア
     private var inputArea: some View {
         VStack(spacing: 0) {
-            // 区切り線
             Divider()
             
             // 選択画像プレビュー
@@ -293,14 +292,14 @@ struct CaloChatView: View {
                 HStack {
                     Spacer()
                     Text("\(messageText.count)/\(maxCharacterCount)")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(messageText.count > maxCharacterCount ? .red : .secondary)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
             }
             
-            // 入力欄（角丸なしのシンプルなデザイン）
+            // 入力欄
             HStack(spacing: 12) {
                 // 画像添付ボタン
                 PhotosPicker(selection: $selectedItem, matching: .images) {
@@ -314,14 +313,14 @@ struct CaloChatView: View {
                     handleImageSelection(newItem)
                 }
                 
-                // テキスト入力フィールド（シンプルな角丸のみ）
+                // テキスト入力フィールド
                 TextField("カロちゃんに相談", text: $messageText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 16))
+                    .font(.system(size: 17))
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 12)
                     .background(Color(UIColor.tertiarySystemFill))
-                    .cornerRadius(20)
+                    .cornerRadius(22)
                     .focused($isTextFieldFocused)
                     .disabled(isTyping)
                     .submitLabel(.send)
@@ -343,7 +342,7 @@ struct CaloChatView: View {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 18))
                         .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 40, height: 40)
                         .background(canSend ? Color.orange : Color.gray.opacity(0.5))
                         .clipShape(Circle())
                 }
@@ -355,7 +354,7 @@ struct CaloChatView: View {
         .background(Color(UIColor.systemGroupedBackground))
     }
     
-    // 即時スクロール（アニメーションなし）
+    // 即時スクロール
     private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
         if isTyping {
             proxy.scrollTo("typing", anchor: .bottom)
@@ -408,12 +407,56 @@ struct CaloChatView: View {
         pendingImage = nil
         errorMessage = nil
         
-        // APIを呼び出し（会話履歴付き）
-        sendToAPIWithHistory(message: userText, image: imageToSend)
+        // APIを呼び出し（ユーザー情報付き）
+        sendToAPIWithUserContext(message: userText, image: imageToSend)
     }
     
-    // MARK: - API呼び出し（会話履歴対応）
-    private func sendToAPIWithHistory(message: String, image: UIImage?) {
+    // MARK: - ユーザーコンテキストを取得
+    private func getUserContext() -> [String: Any] {
+        let pm = profileManager
+        let wm = WeightLogsManager.shared
+        let mm = MealLogsManager.shared
+        let em = ExerciseLogsManager.shared
+        
+        // 今日の栄養素
+        let nutrients = mm.totalNutrients(for: Date())
+        let todayCalories = mm.totalCalories(for: Date())
+        let todayExercise = em.totalCaloriesBurned(for: Date())
+        
+        return [
+            // ユーザー基本情報
+            "gender": pm.gender == "Male" ? "男性" : "女性",
+            "age": pm.age,
+            "height": pm.height,
+            "current_weight": wm.currentWeight,
+            "target_weight": wm.targetWeight,
+            "bmi": String(format: "%.1f", pm.bmi),
+            "bmi_status": pm.bmiStatus,
+            
+            // 目標
+            "goal": pm.goal,  // 減量/維持/増量
+            "exercise_frequency": pm.exerciseFrequency,
+            
+            // 栄養目標
+            "calorie_goal": pm.calorieGoal,
+            "protein_goal": pm.proteinGoal,
+            "fat_goal": pm.fatGoal,
+            "carb_goal": pm.carbGoal,
+            
+            // 今日の実績
+            "today_calories": todayCalories,
+            "today_protein": nutrients.protein,
+            "today_fat": nutrients.fat,
+            "today_carbs": nutrients.carbs,
+            "today_exercise": todayExercise,
+            
+            // 残りカロリー
+            "remaining_calories": pm.calorieGoal - todayCalories + todayExercise
+        ]
+    }
+    
+    // MARK: - API呼び出し（ユーザーコンテキスト付き）
+    private func sendToAPIWithUserContext(message: String, image: UIImage?) {
         isTyping = true
         
         typingTask = Task {
@@ -425,27 +468,19 @@ struct CaloChatView: View {
                     imageBase64 = imageData.base64EncodedString()
                 }
                 
-                // 今日の食事情報を取得
-                let todayMeals = getTodayMealsDescription()
-                let todayCalories = getTodayCalories()
+                // ユーザーコンテキストを取得
+                let userContext = getUserContext()
                 
-                // 会話履歴を取得（現在のメッセージを除く）
+                // 会話履歴を取得
                 let chatHistory = chatManager.chatHistoryForAPI(for: selectedDate)
                 
-                let response: String
-                
-                // 画像がある場合は通常のchat API、ない場合は履歴付きAPI
-                if imageBase64 != nil {
-                    let chatResponse = try await network.chat(message: message, imageBase64: imageBase64)
-                    response = chatResponse.response
-                } else {
-                    response = try await network.sendChatWithHistory(
-                        message: message,
-                        chatHistory: chatHistory,
-                        todayMeals: todayMeals,
-                        todayCalories: todayCalories
-                    )
-                }
+                // API呼び出し
+                let response = try await network.sendChatWithUserContext(
+                    message: message,
+                    imageBase64: imageBase64,
+                    chatHistory: chatHistory,
+                    userContext: userContext
+                )
                 
                 if !Task.isCancelled {
                     await MainActor.run {
@@ -458,14 +493,12 @@ struct CaloChatView: View {
             } catch {
                 if !Task.isCancelled {
                     await MainActor.run {
-                        // エラー時はフォールバックメッセージ
                         let fallbackMessage = generateFallbackResponse(for: message)
                         let errorMsg = ChatMessage(isUser: false, text: fallbackMessage, image: nil)
                         messages.append(errorMsg)
                         chatManager.addMessage(errorMsg, for: selectedDate)
                         isTyping = false
                         
-                        // デバッグ用にエラーを表示
                         print("❌ Chat API Error: \(error.localizedDescription)")
                     }
                 }
@@ -473,41 +506,19 @@ struct CaloChatView: View {
         }
     }
     
-    // 今日の食事内容を取得
-    private func getTodayMealsDescription() -> String {
-        let todayLogs = MealLogsManager.shared.logsForDate(Date())
-        
-        if todayLogs.isEmpty {
-            return ""
-        }
-        
-        return todayLogs.map { "\($0.name)(\($0.calories)kcal)" }.joined(separator: ", ")
-    }
-    
-    // 今日の総カロリーを取得
-    private func getTodayCalories() -> Int {
-        return MealLogsManager.shared.totalCalories(for: Date())
-    }
-    
-    // MARK: - フォールバック応答（API失敗時）
+    // MARK: - フォールバック応答
     private func generateFallbackResponse(for message: String) -> String {
-        // デバッグモードの場合はネットワークエラーの可能性
         if network.isDebugMode {
             return "ごめんにゃ😿 サーバーに接続できなかったみたい...もう一度試してほしいにゃ！"
         }
         
-        // ログインしていない場合
         if !network.isLoggedIn {
             return "ごめんにゃ😿 まだログインしてないみたい...ログインしてからもう一度話しかけてにゃ！"
         }
         
-        // その他のエラー
         return "ごめんにゃ😿 ちょっと調子が悪いみたい...もう一度試してほしいにゃ！"
     }
 }
-
-// MARK: - タイムアウトエラー
-struct TimeoutError: Error {}
 
 // MARK: - タイピングインジケーター
 struct TypingIndicator: View {
@@ -565,7 +576,7 @@ struct ChatMessage: Identifiable {
     let image: UIImage?
 }
 
-// MARK: - チャット吹き出し（長押しメニュー対応）
+// MARK: - チャット吹き出し（ChatGPT風の大きめフォント）
 struct ChatBubble: View {
     let message: ChatMessage
     
@@ -578,16 +589,17 @@ struct ChatBubble: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
-                            .frame(maxWidth: 220)
+                            .frame(maxWidth: 240)
                             .cornerRadius(12)
                     }
                     if let text = message.text, !text.isEmpty {
                         Text(text)
-                            .font(.system(size: 14))
+                            .font(.system(size: 16))  // ChatGPT風の大きさ
                             .foregroundColor(.white)
-                            .padding(12)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
                             .background(Color.orange)
-                            .cornerRadius(16)
+                            .cornerRadius(18)
                             .contextMenu {
                                 Button {
                                     UIPasteboard.general.string = text
@@ -619,11 +631,12 @@ struct ChatBubble: View {
                     
                     if let text = message.text {
                         Text(text)
-                            .font(.system(size: 14))
+                            .font(.system(size: 16))  // ChatGPT風の大きさ
                             .foregroundColor(.primary)
-                            .padding(12)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
                             .background(Color(UIColor.secondarySystemGroupedBackground))
-                            .cornerRadius(16)
+                            .cornerRadius(18)
                             .contextMenu {
                                 Button {
                                     UIPasteboard.general.string = text

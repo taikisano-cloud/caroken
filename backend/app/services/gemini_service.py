@@ -195,20 +195,72 @@ class GeminiService:
         chat_history: Optional[list] = None
     ) -> str:
         """
-        カロちゃんとのチャット（会話履歴対応）
+        カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
         """
         context = ""
         if user_context:
-            context = f"""
-ユーザー情報:
-- 今日の摂取カロリー: {user_context.get('today_calories', '不明')}kcal
-- 目標カロリー: {user_context.get('goal_calories', '不明')}kcal
-- 今日の運動消費: {user_context.get('today_exercise', '不明')}kcal
-- 残りカロリー: {user_context.get('goal_calories', 2000) - user_context.get('today_calories', 0)}kcal
-"""
+            # 基本情報
+            context = "\n【ユーザー情報】\n"
+            
+            # 身体情報
+            if user_context.get('gender'):
+                context += f"- 性別: {user_context.get('gender')}\n"
+            if user_context.get('age'):
+                context += f"- 年齢: {user_context.get('age')}歳\n"
+            if user_context.get('height'):
+                context += f"- 身長: {user_context.get('height')}cm\n"
+            if user_context.get('current_weight'):
+                context += f"- 現在の体重: {user_context.get('current_weight')}kg\n"
+            if user_context.get('target_weight'):
+                context += f"- 目標体重: {user_context.get('target_weight')}kg\n"
+            if user_context.get('bmi'):
+                context += f"- BMI: {user_context.get('bmi')} ({user_context.get('bmi_status', '')})\n"
+            
+            # 目標
+            if user_context.get('goal'):
+                context += f"- 目標: {user_context.get('goal')}\n"
+            if user_context.get('exercise_frequency'):
+                context += f"- 運動頻度: {user_context.get('exercise_frequency')}\n"
+            
+            # 栄養目標
+            context += "\n【今日の状況】\n"
+            if user_context.get('today_calories') is not None:
+                context += f"- 摂取カロリー: {user_context.get('today_calories')}kcal"
+                if user_context.get('calorie_goal'):
+                    context += f" / 目標{user_context.get('calorie_goal')}kcal"
+                context += "\n"
+            
+            if user_context.get('today_protein') is not None:
+                context += f"- たんぱく質: {user_context.get('today_protein')}g"
+                if user_context.get('protein_goal'):
+                    context += f" / 目標{user_context.get('protein_goal')}g"
+                context += "\n"
+            
+            if user_context.get('today_fat') is not None:
+                context += f"- 脂質: {user_context.get('today_fat')}g"
+                if user_context.get('fat_goal'):
+                    context += f" / 目標{user_context.get('fat_goal')}g"
+                context += "\n"
+            
+            if user_context.get('today_carbs') is not None:
+                context += f"- 炭水化物: {user_context.get('today_carbs')}g"
+                if user_context.get('carb_goal'):
+                    context += f" / 目標{user_context.get('carb_goal')}g"
+                context += "\n"
+            
+            if user_context.get('today_exercise'):
+                context += f"- 運動消費: {user_context.get('today_exercise')}kcal\n"
+            
+            if user_context.get('remaining_calories') is not None:
+                remaining = user_context.get('remaining_calories')
+                if remaining > 0:
+                    context += f"- 残りカロリー: あと{remaining}kcal食べられる\n"
+                else:
+                    context += f"- 残りカロリー: {abs(remaining)}kcalオーバー⚠️\n"
+            
             # 今日の食事内容があれば追加
             if user_context.get('today_meals'):
-                context += f"\n今日食べたもの: {user_context.get('today_meals')}"
+                context += f"\n今日食べたもの: {user_context.get('today_meals')}\n"
         
         # 会話履歴を構築
         history_text = ""
@@ -230,10 +282,12 @@ class GeminiService:
 - ユーザーの食事や健康について具体的なアドバイスをする
 
 【重要】
+- ユーザーの情報（性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
 - 会話の流れを理解して、自然に返答する
 - 毎回カロリーの話をするのではなく、ユーザーの質問や話題に合わせる
 - 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
 - 過去の会話を参照して、一貫性のある返答をする
+- ユーザーの目標（減量/維持/増量）に合わせたアドバイスをする
 
 {context}
 {history_text}
