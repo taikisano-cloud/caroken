@@ -89,10 +89,11 @@ struct CaloChatView: View {
     @State private var pendingImage: UIImage? = nil
     @State private var isTyping: Bool = false
     @State private var typingTask: Task<Void, Never>?
+    @State private var errorMessage: String?
     @FocusState private var isTextFieldFocused: Bool
     
     private let chatManager = ChatMessagesManager.shared
-    private let responseTimeout: TimeInterval = 10.0
+    private let network = NetworkManager.shared
     
     private var canSend: Bool {
         !isTyping && (!messageText.isEmpty || pendingImage != nil)
@@ -119,6 +120,15 @@ struct CaloChatView: View {
                 chatHistoryView
             } else {
                 initialView
+            }
+            
+            // エラーメッセージ
+            if let error = errorMessage {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundColor(.red)
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
             }
             
             // 入力エリア（チャット欄と一体化）
@@ -363,26 +373,34 @@ struct CaloChatView: View {
         messages.append(userMessage)
         chatManager.addMessage(userMessage, for: selectedDate)
         
-        let userText = messageText.isEmpty ? "画像が送信されました" : messageText
+        let userText = messageText.isEmpty ? "画像を送信しました" : messageText
         messageText = ""
         pendingImage = nil
+        errorMessage = nil
         
-        sendResponseWithTimeout(for: userText)
+        // APIを呼び出し
+        sendToAPI(message: userText, image: imageToSend)
     }
     
-    private func sendResponseWithTimeout(for userText: String) {
+    // MARK: - API呼び出し
+    private func sendToAPI(message: String, image: UIImage?) {
         isTyping = true
         
         typingTask = Task {
             do {
-                try await withTimeout(seconds: responseTimeout) {
-                    try await Task.sleep(nanoseconds: UInt64.random(in: 1_000_000_000...2_000_000_000))
+                // 画像をBase64に変換
+                var imageBase64: String? = nil
+                if let image = image,
+                   let imageData = image.jpegData(compressionQuality: 0.7) {
+                    imageBase64 = imageData.base64EncodedString()
                 }
+                
+                // API呼び出し
+                let response = try await network.chat(message: message, imageBase64: imageBase64)
                 
                 if !Task.isCancelled {
                     await MainActor.run {
-                        let response = generateResponse(for: userText)
-                        let responseMessage = ChatMessage(isUser: false, text: response, image: nil)
+                        let responseMessage = ChatMessage(isUser: false, text: response.response, image: nil)
                         messages.append(responseMessage)
                         chatManager.addMessage(responseMessage, for: selectedDate)
                         isTyping = false
@@ -391,45 +409,30 @@ struct CaloChatView: View {
             } catch {
                 if !Task.isCancelled {
                     await MainActor.run {
-                        let errorMessage = ChatMessage(isUser: false, text: "ごめんにゃ😿 応答に時間がかかりすぎたにゃ...もう一度試してね！", image: nil)
-                        messages.append(errorMessage)
-                        chatManager.addMessage(errorMessage, for: selectedDate)
+                        // エラー時はフォールバックメッセージ
+                        let fallbackMessage = generateFallbackResponse(for: message)
+                        let errorMsg = ChatMessage(isUser: false, text: fallbackMessage, image: nil)
+                        messages.append(errorMsg)
+                        chatManager.addMessage(errorMsg, for: selectedDate)
                         isTyping = false
+                        
+                        // デバッグ用にエラーを表示
+                        print("Chat API Error: \(error.localizedDescription)")
                     }
                 }
             }
         }
     }
     
-    private func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-            
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw TimeoutError()
-            }
-            
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+    // MARK: - フォールバック応答（API失敗時）
+    private func generateFallbackResponse(for message: String) -> String {
+        // ログインしていない場合
+        if !network.isLoggedIn {
+            return "ごめんにゃ😿 まだログインしてないみたい...ログインしてからもう一度話しかけてにゃ！"
         }
-    }
-    
-    private func generateResponse(for message: String) -> String {
-        if message.contains("画像") {
-            return "画像を受け取ったにゃ🐱 美味しそうだね！これは約350kcalくらいかにゃ？"
-        } else if message.contains("タンパク質") || message.contains("肉") {
-            return "タンパク質を増やすなら、鶏むね肉や卵がおすすめだにゃ！🍗 今日あと100g摂ると目標達成できるよ！"
-        } else if message.contains("運動") {
-            return "今日は3,982歩歩いたね！あと6,000歩で目標達成だにゃ🏃‍♂️ 夕方に少し散歩するのはどう？"
-        } else if message.contains("カロリー") {
-            return "今日の摂取カロリーは順調だにゃ！このペースで頑張ろう！🔥"
-        } else {
-            return "なるほど！今日のカロリーは順調だにゃ😊 このペースで頑張ろう！"
-        }
+        
+        // その他のエラー
+        return "ごめんにゃ😿 ちょっと調子が悪いみたい...もう一度試してほしいにゃ！"
     }
 }
 

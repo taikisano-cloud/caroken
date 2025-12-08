@@ -6,9 +6,20 @@ from app.models.chat import (
     MealAnalysisRequest, DetailedMealAnalysis,
     ChatRequest, ChatResponse, ChatMessageCreate, ChatMessageResponse
 )
+from pydantic import BaseModel
 from datetime import datetime, date
 
 router = APIRouter(prefix="/ai", tags=["AI分析"])
+
+
+# テスト用リクエスト/レスポンス
+class TestChatRequest(BaseModel):
+    message: str
+    image_base64: str | None = None
+
+
+class TestChatResponse(BaseModel):
+    response: str
 
 
 @router.post("/analyze-meal", response_model=DetailedMealAnalysis)
@@ -127,6 +138,68 @@ async def chat_with_calo(
             user_message=ChatMessageResponse(**user_msg_response.data[0]),
             ai_message=ChatMessageResponse(**ai_msg_response.data[0])
         )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+# ============================================
+# テスト用エンドポイント（認証不要）
+# ============================================
+
+@router.post("/chat/test", response_model=TestChatResponse)
+async def chat_test(request: TestChatRequest):
+    """
+    テスト用チャット（認証不要・履歴保存なし）
+    開発/デバッグ用途のみ
+    """
+    try:
+        # テスト用のユーザーコンテキスト
+        user_context = {
+            "today_calories": 1200,
+            "goal_calories": 2000,
+            "today_exercise": 150
+        }
+        
+        # AIレスポンスを生成
+        ai_response = await gemini_service.chat(
+            message=request.message,
+            user_context=user_context,
+            image_base64=request.image_base64
+        )
+        
+        return TestChatResponse(response=ai_response)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/analyze-meal/test", response_model=DetailedMealAnalysis)
+async def analyze_meal_test(request: MealAnalysisRequest):
+    """
+    テスト用食事分析（認証不要）
+    開発/デバッグ用途のみ
+    """
+    try:
+        if request.image_base64:
+            result = await gemini_service.analyze_meal_image(request.image_base64)
+        elif request.description:
+            result = await gemini_service.analyze_meal_text(request.description)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Either image_base64 or description is required"
+            )
+        
+        return result
         
     except HTTPException:
         raise

@@ -11,8 +11,8 @@ settings = get_settings()
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
-# モデル設定
-model = genai.GenerativeModel('gemini-2.0-flash-exp')
+# モデル設定 - Gemini 3 Pro Preview（最高性能）
+model = genai.GenerativeModel('gemini-3-pro-preview')
 
 
 class GeminiService:
