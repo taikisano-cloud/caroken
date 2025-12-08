@@ -230,6 +230,100 @@ class NetworkManager: ObservableObject {
         }
     }
     
+    // MARK: - 会話履歴対応チャット
+    func sendChatWithHistory(
+        message: String,
+        chatHistory: [[String: Any]],
+        todayMeals: String,
+        todayCalories: Int
+    ) async throws -> String {
+        // デバッグモードならテストエンドポイントを使用
+        let endpoint = isDebugMode ? "/ai/chat/test" : "/ai/chat"
+        
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if !isDebugMode, let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // リクエストボディを構築
+        let body: [String: Any] = [
+            "message": message,
+            "chat_history": chatHistory,
+            "today_meals": todayMeals,
+            "today_calories": todayCalories
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw NetworkError.invalidResponse
+        }
+        
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let responseText = json["response"] as? String {
+            return responseText
+        }
+        
+        throw NetworkError.invalidResponse
+    }
+    
+    // MARK: - ホームアドバイス取得
+    func getHomeAdvice(
+        todayCalories: Int,
+        goalCalories: Int,
+        todayProtein: Int,
+        todayFat: Int,
+        todayCarbs: Int,
+        todayMeals: String,
+        mealCount: Int
+    ) async throws -> String {
+        let endpoint = "/ai/advice/test"
+        
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "today_calories": todayCalories,
+            "goal_calories": goalCalories,
+            "today_protein": todayProtein,
+            "today_fat": todayFat,
+            "today_carbs": todayCarbs,
+            "today_meals": todayMeals,
+            "meal_count": mealCount
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw NetworkError.invalidResponse
+        }
+        
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let advice = json["advice"] as? String {
+            return advice
+        }
+        
+        throw NetworkError.invalidResponse
+    }
+    
     func getChatHistory(date: String? = nil) async throws -> [ChatMessageResponse] {
         var endpoint = "/ai/chat/history"
         if let date = date {

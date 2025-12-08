@@ -1,11 +1,21 @@
+# FastAPI
 fastapi
 uvicorn[standard]
 python-multipart
+
+# Supabase
 supabase
+
+# AI
 google-generativeai
+
+# Utilities
 python-dotenv
-pydantic[email]
+pydantic
 pydantic-settings
+httpx
 python-jose[cryptography]
-aiofiles
 email-validator
+
+# For image handling
+aiofiles

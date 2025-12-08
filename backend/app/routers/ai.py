@@ -16,6 +16,8 @@ router = APIRouter(prefix="/ai", tags=["AI分析"])
 class TestChatRequest(BaseModel):
     message: str
     image_base64: str | None = None
+    chat_history: list | None = None  # 会話履歴
+    today_meals: str | None = None    # 今日食べたもの
 
 
 class TestChatResponse(BaseModel):
@@ -163,14 +165,16 @@ async def chat_test(request: TestChatRequest):
         user_context = {
             "today_calories": 1200,
             "goal_calories": 2000,
-            "today_exercise": 150
+            "today_exercise": 150,
+            "today_meals": request.today_meals or ""
         }
         
-        # AIレスポンスを生成
+        # AIレスポンスを生成（会話履歴を渡す）
         ai_response = await gemini_service.chat(
             message=request.message,
             user_context=user_context,
-            image_base64=request.image_base64
+            image_base64=request.image_base64,
+            chat_history=request.chat_history
         )
         
         return TestChatResponse(response=ai_response)
@@ -208,6 +212,47 @@ async def analyze_meal_test(request: MealAnalysisRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+# ============================================
+# ホームアドバイス用エンドポイント（認証不要）
+# ============================================
+
+class HomeAdviceRequest(BaseModel):
+    today_calories: int = 0
+    goal_calories: int = 2000
+    today_protein: int = 0
+    today_fat: int = 0
+    today_carbs: int = 0
+    today_meals: str | None = None
+    meal_count: int = 0
+
+
+class HomeAdviceResponse(BaseModel):
+    advice: str
+
+
+@router.post("/advice/test", response_model=HomeAdviceResponse)
+async def get_home_advice(request: HomeAdviceRequest):
+    """
+    ホーム画面用のアドバイスを取得（認証不要）
+    """
+    try:
+        advice = await gemini_service.generate_advice(
+            today_calories=request.today_calories,
+            goal_calories=request.goal_calories,
+            today_protein=request.today_protein,
+            today_fat=request.today_fat,
+            today_carbs=request.today_carbs,
+            today_meals=request.today_meals or "",
+            meal_count=request.meal_count
+        )
+        
+        return HomeAdviceResponse(advice=advice)
+        
+    except Exception as e:
+        # エラー時はデフォルトメッセージ
+        return HomeAdviceResponse(advice="今日も一緒にがんばろうにゃ！🐱")
 
 
 @router.get("/chat/history")

@@ -11,8 +11,8 @@ settings = get_settings()
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
-# モデル設定（2.0 Flash - 高速で安定）
-model = genai.GenerativeModel('gemini-2.0-flash-exp')
+# モデル設定（2.5 Pro - 高度な推論能力）
+model = genai.GenerativeModel('gemini-2.5-pro')
 
 
 class GeminiService:
@@ -191,10 +191,11 @@ class GeminiService:
     async def chat(
         message: str,
         user_context: Optional[dict] = None,
-        image_base64: Optional[str] = None
+        image_base64: Optional[str] = None,
+        chat_history: Optional[list] = None
     ) -> str:
         """
-        カロちゃんとのチャット
+        カロちゃんとのチャット（会話履歴対応）
         """
         context = ""
         if user_context:
@@ -203,40 +204,175 @@ class GeminiService:
 - 今日の摂取カロリー: {user_context.get('today_calories', '不明')}kcal
 - 目標カロリー: {user_context.get('goal_calories', '不明')}kcal
 - 今日の運動消費: {user_context.get('today_exercise', '不明')}kcal
+- 残りカロリー: {user_context.get('goal_calories', 2000) - user_context.get('today_calories', 0)}kcal
 """
+            # 今日の食事内容があれば追加
+            if user_context.get('today_meals'):
+                context += f"\n今日食べたもの: {user_context.get('today_meals')}"
         
-        prompt = f"""
+        # 会話履歴を構築
+        history_text = ""
+        if chat_history and len(chat_history) > 0:
+            history_text = "\n\n【これまでの会話】\n"
+            for msg in chat_history[-10:]:  # 直近10件まで
+                role = "ユーザー" if msg.get('is_user') else "カロちゃん"
+                history_text += f"{role}: {msg.get('message', '')}\n"
+        
+        system_prompt = f"""
 あなたは「カロちゃん」という名前の可愛い猫のAIアシスタントです。
 カロ研（カロリー研究）アプリのマスコットキャラクターとして、ユーザーの健康管理をサポートします。
 
-性格:
-- 明るくて元気
-- ユーザーを励ます
+【性格】
+- 明るくて元気、ユーザーを励ます
 - 語尾に「にゃ」「だにゃ」をつける
-- 絵文字を適度に使う（🐱😊🔥など）
+- 絵文字を適度に使う（🐱😊🔥💪🍽️など）
 - 専門的なアドバイスも分かりやすく伝える
+- ユーザーの食事や健康について具体的なアドバイスをする
+
+【重要】
+- 会話の流れを理解して、自然に返答する
+- 毎回カロリーの話をするのではなく、ユーザーの質問や話題に合わせる
+- 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
+- 過去の会話を参照して、一貫性のある返答をする
 
 {context}
+{history_text}
 
-ユーザーのメッセージ: {message}
+【現在のユーザーのメッセージ】
+{message}
 
-カロちゃんとして返答してください（2-3文程度で簡潔に）:
+カロちゃんとして自然に返答してください（2-4文程度）:
 """
         
         try:
             if image_base64:
                 image_data = base64.b64decode(image_base64)
                 response = model.generate_content([
-                    prompt,
+                    system_prompt,
                     {"mime_type": "image/jpeg", "data": image_data}
                 ])
             else:
-                response = model.generate_content(prompt)
+                response = model.generate_content(system_prompt)
             
             return response.text.strip()
             
         except Exception as e:
+            print(f"Gemini API Error: {e}")
             return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
+    
+    @staticmethod
+    async def generate_advice(
+        today_calories: int,
+        goal_calories: int,
+        today_protein: int,
+        today_fat: int,
+        today_carbs: int,
+        today_meals: str,
+        meal_count: int
+    ) -> str:
+        """
+        ホーム画面用のアドバイスを生成
+        """
+        remaining = goal_calories - today_calories
+        progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
+        
+        # 時間帯を考慮
+        from datetime import datetime
+        hour = datetime.now().hour
+        time_context = ""
+        if hour < 10:
+            time_context = "朝の時間帯"
+        elif hour < 14:
+            time_context = "昼の時間帯"
+        elif hour < 18:
+            time_context = "夕方の時間帯"
+        else:
+            time_context = "夜の時間帯"
+        
+        prompt = f"""
+あなたは「カロちゃん」という猫のAIアシスタントです。
+
+【ユーザーの今日の状況】
+- 摂取カロリー: {today_calories}kcal / 目標: {goal_calories}kcal
+- 達成率: {progress_percent}%
+- 残りカロリー: {remaining}kcal
+- たんぱく質: {today_protein}g
+- 脂質: {today_fat}g
+- 炭水化物: {today_carbs}g
+- 食事回数: {meal_count}回
+- 今日食べたもの: {today_meals or 'まだ記録なし'}
+- 現在の時間帯: {time_context}
+
+【指示】
+上記の状況に合わせた短いアドバイスを1文で返してください。
+- 語尾に「にゃ」をつける
+- 絵文字を1-2個使う
+- 具体的で役立つアドバイスにする
+- 状況に応じて変化させる
+
+例:
+- 「朝ごはんまだみたいだにゃ！軽くでもいいから食べてほしいにゃ🍳」
+- 「いい感じに進んでるにゃ！あと{remaining}kcalだから夕食は軽めがおすすめだにゃ🐱」
+- 「たんぱく質がちょっと少ないかも...お肉かお魚を食べるといいにゃ💪」
+"""
+        
+        try:
+            response = model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            print(f"Gemini API Error (advice): {e}")
+            return "今日も一緒にがんばろうにゃ！🐱"
+    
+    @staticmethod
+    async def extract_memory(message: str, response: str) -> Optional[dict]:
+        """
+        会話から重要な情報を抽出して記憶として保存するか判断
+        """
+        prompt = f"""
+以下の会話から、長期的に覚えておくべき重要な情報があるか判断してください。
+
+【ユーザーのメッセージ】
+{message}
+
+【カロちゃんの返答】
+{response}
+
+【抽出すべき情報の例】
+- 食の好み（嫌いな食べ物、アレルギー、好きな料理）
+- 健康目標（ダイエット目標、筋トレ目標）
+- 生活習慣（朝型/夜型、食事時間の傾向）
+- 体の状態（持病、体質）
+
+【指示】
+重要な情報があれば以下のJSON形式で返答してください。
+なければ「null」とだけ返答してください。
+
+{{
+    "category": "preference|goal|health|habit",
+    "content": "抽出した情報（簡潔に）",
+    "importance": 1-5の数字
+}}
+"""
+        
+        try:
+            result = model.generate_content(prompt)
+            text = result.text.strip()
+            
+            if text.lower() == "null" or text == "":
+                return None
+            
+            # JSONをパース
+            import json
+            # ```json などのマークダウンを除去
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            
+            return json.loads(text.strip())
+        except Exception as e:
+            print(f"Memory extraction error: {e}")
+            return None
 
 
 gemini_service = GeminiService()
