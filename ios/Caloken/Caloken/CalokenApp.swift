@@ -2,51 +2,36 @@ import SwiftUI
 
 @main
 struct CalokenApp: App {
-    @State private var isLoading: Bool = true
+    // ログイン状態を管理（課金完了後にtrue）
     @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
+    
+    // AuthServiceを監視
+    @StateObject private var authService = AuthService.shared
     
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                // メインコンテンツ（ログイン状態で切り替え）
-                Group {
-                    if isLoggedIn {
-                        // ログイン済み → メイン画面
-                        ContentView()
-                    } else {
-                        // 未ログイン → S1（オンボーディング/ログイン選択画面）
-                        S1_OnboardingStartView()
-                    }
-                }
-                .opacity(isLoading ? 0 : 1)
-                
-                // ローディング画面
-                if isLoading {
-                    LaunchScreenView()
-                        .transition(.opacity)
+            Group {
+                if isLoggedIn {
+                    // ログイン済み → メイン画面
+                    ContentView()
+                } else {
+                    // 未ログイン → オンボーディング
+                    S1_OnboardingStartView()
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: isLoggedIn)
-            .onAppear {
-                initializeApp()
+            .onOpenURL { url in
+                // Google OAuth コールバック処理
+                handleOAuthCallback(url: url)
             }
         }
     }
     
-    private func initializeApp() {
-        Task {
-            // 実際のデータ読み込み処理をここに追加
-            // await loadUserData()
-            // await checkAuthStatus()
-            
-            // 最低1.5秒は表示
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            
-            // メイン画面へ遷移
-            await MainActor.run {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    isLoading = false
-                }
+    // MARK: - OAuth Callback Handler
+    private func handleOAuthCallback(url: URL) {
+        // カスタムURLスキーム: com.stellacreation.caloken://login-callback
+        if url.scheme == "com.stellacreation.caloken" && url.host == "login-callback" {
+            Task {
+                await authService.handleOAuthCallback(url: url)
             }
         }
     }

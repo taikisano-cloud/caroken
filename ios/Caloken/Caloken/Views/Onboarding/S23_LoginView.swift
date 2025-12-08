@@ -4,12 +4,20 @@ import AuthenticationServices
 struct S23_LoginView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var authService = AuthService.shared
+    
     @State private var navigateToPaywall: Bool = false
     @State private var navigateToTerms: Bool = false
     @State private var navigateToPrivacy: Bool = false
     @State private var isSigningIn: Bool = false
     @State private var showError: Bool = false
     @State private var errorMessage: String = ""
+    
+    // メール/パスワード入力用
+    @State private var showEmailLogin: Bool = false
+    @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var isSignUp: Bool = false
     
     var body: some View {
         ZStack {
@@ -32,54 +40,13 @@ struct S23_LoginView: View {
                         .frame(width: 36, height: 5)
                         .padding(.top, 10)
                     
-                    // Appleでサインイン
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        handleAppleSignIn(result: result)
+                    if showEmailLogin {
+                        // メール/パスワード入力フォーム
+                        emailLoginForm
+                    } else {
+                        // ソーシャルログインボタン
+                        socialLoginButtons
                     }
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-                    .frame(height: 54)
-                    .cornerRadius(12)
-                    .padding(.horizontal, 24)
-                    .disabled(isSigningIn)
-                    
-                    // Googleでサインイン
-                    Button {
-                        navigateToPaywall = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 24, height: 24)
-                                
-                                Text("G")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            colors: [.red, .yellow, .green, .blue],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                            }
-                            
-                            Text("Googleで続ける")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundColor(colorScheme == .dark ? .white : .black)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color(UIColor.separator), lineWidth: 1)
-                        )
-                    }
-                    .padding(.horizontal, 24)
-                    .disabled(isSigningIn)
                     
                     // 利用規約とプライバシーポリシー
                     VStack(spacing: 4) {
@@ -120,7 +87,7 @@ struct S23_LoginView: View {
             }
             
             // ローディングオーバーレイ
-            if isSigningIn {
+            if isSigningIn || authService.isLoading {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
                 
@@ -139,13 +106,197 @@ struct S23_LoginView: View {
         .navigationDestination(isPresented: $navigateToPrivacy) {
             S27_8_PrivacyPolicyView()
         }
-        .alert("サインインエラー", isPresented: $showError) {
+        .alert("エラー", isPresented: $showError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
+        .onChange(of: authService.isLoggedIn) { _, newValue in
+            if newValue {
+                navigateToPaywall = true
+            }
+        }
     }
     
+    // MARK: - Social Login Buttons
+    private var socialLoginButtons: some View {
+        VStack(spacing: 16) {
+            // Appleでサインイン
+            SignInWithAppleButton(.signIn) { request in
+                request.requestedScopes = [.fullName, .email]
+            } onCompletion: { result in
+                handleAppleSignIn(result: result)
+            }
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(height: 54)
+            .cornerRadius(12)
+            .padding(.horizontal, 24)
+            .disabled(isSigningIn)
+            
+            // Googleでサインイン
+            Button {
+                signInWithGoogle()
+            } label: {
+                HStack(spacing: 12) {
+                    Image("google_logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .background(
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 24, height: 24)
+                        )
+                    
+                    Text("Googleで続ける")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(UIColor.separator), lineWidth: 1)
+                )
+            }
+            .padding(.horizontal, 24)
+            .disabled(isSigningIn)
+            
+            // メールでログイン
+            Button {
+                withAnimation {
+                    showEmailLogin = true
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "envelope.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.orange)
+                    
+                    Text("メールアドレスで続ける")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(UIColor.separator), lineWidth: 1)
+                )
+            }
+            .padding(.horizontal, 24)
+            .disabled(isSigningIn)
+        }
+    }
+    
+    // MARK: - Email Login Form
+    private var emailLoginForm: some View {
+        VStack(spacing: 16) {
+            // 戻るボタン
+            HStack {
+                Button {
+                    withAnimation {
+                        showEmailLogin = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("戻る")
+                    }
+                    .font(.system(size: 15))
+                    .foregroundColor(.orange)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            
+            // タイトル
+            Text(isSignUp ? "アカウント作成" : "ログイン")
+                .font(.system(size: 20, weight: .bold))
+            
+            // メールアドレス
+            TextField("メールアドレス", text: $email)
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
+                .autocapitalization(.none)
+                .padding()
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal, 24)
+            
+            // パスワード
+            SecureField("パスワード", text: $password)
+                .textContentType(isSignUp ? .newPassword : .password)
+                .padding()
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal, 24)
+            
+            // ログイン/登録ボタン
+            Button {
+                Task {
+                    await emailSignIn()
+                }
+            } label: {
+                Text(isSignUp ? "アカウント作成" : "ログイン")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(Color.orange)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 24)
+            .disabled(email.isEmpty || password.isEmpty)
+            
+            // 切り替えボタン
+            Button {
+                withAnimation {
+                    isSignUp.toggle()
+                }
+            } label: {
+                Text(isSignUp ? "すでにアカウントをお持ちの方" : "アカウントを作成")
+                    .font(.system(size: 14))
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+    
+    // MARK: - Google Sign In
+    private func signInWithGoogle() {
+        Task {
+            do {
+                try await authService.signInWithGoogle()
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Email Sign In
+    private func emailSignIn() async {
+        do {
+            if isSignUp {
+                try await authService.signUp(email: email, password: password)
+            } else {
+                try await authService.signIn(email: email, password: password)
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+    
+    // MARK: - Apple Sign In
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
@@ -165,6 +316,7 @@ struct S23_LoginView: View {
                     print("   Email: \(email)")
                 }
                 
+                // TODO: Supabase連携（Apple認証）
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isSigningIn = false
                     navigateToPaywall = true
@@ -187,25 +339,20 @@ struct S23_LoginView: View {
         case .canceled:
             print("   User canceled")
         case .unknown:
-            print("   Unknown error")
-            errorMessage = "Apple Sign Inを使用するには、Xcodeで'Sign in with Apple' Capabilityを追加してください。\n\n開発中は「スキップ」ボタンをお使いください。"
+            errorMessage = "Apple Sign Inを使用するには、Apple Developer Programへの登録が必要です。\n\n代わりにGoogleまたはメールでログインしてください。"
             showError = true
         case .invalidResponse:
-            print("   Invalid response")
             errorMessage = "サーバーからの応答が無効です。もう一度お試しください。"
             showError = true
         case .notHandled:
-            print("   Not handled")
             errorMessage = "認証リクエストが処理されませんでした。"
             showError = true
         case .failed:
-            print("   Failed")
             errorMessage = "認証に失敗しました。もう一度お試しください。"
             showError = true
         case .notInteractive:
             print("   Not interactive")
         @unknown default:
-            print("   Unknown case")
             errorMessage = "予期しないエラーが発生しました。"
             showError = true
         }
