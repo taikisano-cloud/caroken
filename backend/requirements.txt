@@ -4,7 +4,8 @@ python-multipart
 supabase
 google-generativeai
 python-dotenv
-pydantic
+pydantic[email]
 pydantic-settings
 python-jose[cryptography]
 aiofiles
+email-validator
