@@ -189,8 +189,8 @@ struct ChatMessageResponse: Decodable, Identifiable {
 
 struct ChatResponse: Decodable {
     let response: String
-    let user_message: ChatMessageResponse
-    let ai_message: ChatMessageResponse
+    let user_message: ChatMessageResponse?  // テストモードではnil
+    let ai_message: ChatMessageResponse?    // テストモードではnil
 }
 
 // MARK: - Stats Models
