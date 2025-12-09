@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct S27_2_ProfileEditView: View {
-    @StateObject private var profileManager = UserProfileManager.shared
-    @StateObject private var weightLogsManager = WeightLogsManager.shared
+    @ObservedObject private var profileManager = UserProfileManager.shared
+    @ObservedObject private var weightLogsManager = WeightLogsManager.shared
     
     @Environment(\.dismiss) private var dismiss
     
@@ -11,6 +11,12 @@ struct S27_2_ProfileEditView: View {
     @State private var showWeightPicker: Bool = false
     @State private var showGenderPicker: Bool = false
     @State private var showDatePicker: Bool = false
+    
+    // ローカル編集値
+    @State private var editHeight: Int = 170
+    @State private var editWeight: Double = 65.0
+    @State private var editGender: String = "未設定"
+    @State private var editBirthDate: Date = Date()
     
     // 性別の表示名
     private func genderDisplayName(_ gender: String) -> String {
@@ -28,8 +34,9 @@ struct S27_2_ProfileEditView: View {
                 // 身長
                 ProfileEditRow(
                     label: "身長",
-                    value: "\(profileManager.height) cm"
+                    value: "\(Int(profileManager.height)) cm"
                 ) {
+                    editHeight = Int(profileManager.height)
                     showHeightPicker = true
                 }
                 
@@ -38,6 +45,7 @@ struct S27_2_ProfileEditView: View {
                     label: "体重",
                     value: String(format: "%.1f kg", weightLogsManager.currentWeight)
                 ) {
+                    editWeight = weightLogsManager.currentWeight
                     showWeightPicker = true
                 }
                 
@@ -46,6 +54,7 @@ struct S27_2_ProfileEditView: View {
                     label: "性別",
                     value: genderDisplayName(profileManager.gender)
                 ) {
+                    editGender = profileManager.gender
                     showGenderPicker = true
                 }
                 
@@ -54,6 +63,7 @@ struct S27_2_ProfileEditView: View {
                     label: "生年月日",
                     value: formatDate(profileManager.birthDate)
                 ) {
+                    editBirthDate = profileManager.birthDate
                     showDatePicker = true
                 }
             }
@@ -63,51 +73,50 @@ struct S27_2_ProfileEditView: View {
         .background(Color(UIColor.systemBackground))
         .navigationTitle("プロフィール編集")
         .navigationBarTitleDisplayMode(.large)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+            }
+        }
         // 身長ピッカー
         .sheet(isPresented: $showHeightPicker) {
-            HeightPickerSheet(height: Binding(
-                get: { profileManager.height },
-                set: { newValue in
-                    profileManager.height = newValue
-                    profileManager.saveProfile()
-                }
-            ))
+            HeightPickerSheet(height: $editHeight, onSave: {
+                profileManager.height = Double(editHeight)
+                profileManager.saveProfile()
+            })
             .presentationDetents([.height(300)])
         }
         // 体重ピッカー
         .sheet(isPresented: $showWeightPicker) {
-            WeightPickerSheetDouble(
-                weight: Binding(
-                    get: { weightLogsManager.currentWeight },
-                    set: { newValue in
-                        weightLogsManager.addLog(newValue)
-                    }
-                )
-            )
+            WeightPickerSheetDouble(weight: $editWeight, onSave: {
+                weightLogsManager.addLog(editWeight)
+            })
             .presentationDetents([.height(300)])
         }
         // 性別ピッカー
         .sheet(isPresented: $showGenderPicker) {
-            GenderPickerSheet(gender: Binding(
-                get: { profileManager.gender },
-                set: { newValue in
-                    profileManager.gender = newValue
-                    profileManager.saveProfile()
-                }
-            ))
+            GenderPickerSheet(gender: $editGender, onSave: {
+                profileManager.gender = editGender
+                profileManager.saveProfile()
+            })
             .presentationDetents([.height(300)])
         }
         // 生年月日ピッカー
         .sheet(isPresented: $showDatePicker) {
-            DatePickerSheet(date: Binding(
-                get: { profileManager.birthDate },
-                set: { newValue in
-                    profileManager.birthDate = newValue
-                    profileManager.saveProfile()
-                }
-            ))
+            DatePickerSheet(date: $editBirthDate, onSave: {
+                profileManager.birthDate = editBirthDate
+                profileManager.saveProfile()
+            })
             .presentationDetents([.height(350)])
         }
+        .enableSwipeBack()
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -151,6 +160,7 @@ struct ProfileEditRow: View {
 // MARK: - 身長ピッカーシート
 struct HeightPickerSheet: View {
     @Binding var height: Int
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -168,6 +178,7 @@ struct HeightPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") {
+                        onSave()
                         dismiss()
                     }
                 }
@@ -179,6 +190,7 @@ struct HeightPickerSheet: View {
 // MARK: - 体重ピッカーシート（Double対応）
 struct WeightPickerSheetDouble: View {
     @Binding var weight: Double
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     
     @State private var weightWhole: Int = 70
@@ -220,6 +232,7 @@ struct WeightPickerSheetDouble: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") {
                         weight = Double(weightWhole) + Double(weightDecimal) / 10.0
+                        onSave()
                         dismiss()
                     }
                 }
@@ -235,6 +248,7 @@ struct WeightPickerSheetDouble: View {
 // MARK: - 体重ピッカーシート（Int用 - 互換性のため残す）
 struct WeightPickerSheet: View {
     @Binding var weight: Int
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -252,6 +266,7 @@ struct WeightPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") {
+                        onSave()
                         dismiss()
                     }
                 }
@@ -263,6 +278,7 @@ struct WeightPickerSheet: View {
 // MARK: - 性別ピッカーシート（その他追加）
 struct GenderPickerSheet: View {
     @Binding var gender: String
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -270,6 +286,7 @@ struct GenderPickerSheet: View {
             VStack(spacing: 16) {
                 Button {
                     gender = "Male"
+                    onSave()
                     dismiss()
                 } label: {
                     HStack {
@@ -289,6 +306,7 @@ struct GenderPickerSheet: View {
                 
                 Button {
                     gender = "Female"
+                    onSave()
                     dismiss()
                 } label: {
                     HStack {
@@ -308,6 +326,7 @@ struct GenderPickerSheet: View {
                 
                 Button {
                     gender = "Other"
+                    onSave()
                     dismiss()
                 } label: {
                     HStack {
@@ -342,6 +361,7 @@ struct GenderPickerSheet: View {
 // MARK: - 生年月日ピッカーシート
 struct DatePickerSheet: View {
     @Binding var date: Date
+    var onSave: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -362,6 +382,7 @@ struct DatePickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完了") {
+                        onSave()
                         dismiss()
                     }
                 }

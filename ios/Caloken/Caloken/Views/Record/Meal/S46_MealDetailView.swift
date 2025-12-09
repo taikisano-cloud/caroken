@@ -71,7 +71,6 @@ struct S46_MealDetailView: View {
         }
         .onAppear {
             loadOriginalData()
-            // APIからコメントを取得（オプション）
             fetchCharacterComment()
         }
         .onChange(of: editingField) { oldValue, newValue in
@@ -338,7 +337,7 @@ struct S46_MealDetailView: View {
         .padding(.top, 0)
     }
     
-    // MARK: - 下部ボタンセクション
+    // MARK: - 下部ボタンセクション（AIに再計算ボタン削除）
     private var bottomButtonsSection: some View {
         HStack(spacing: 12) {
             leftActionButton
@@ -351,8 +350,19 @@ struct S46_MealDetailView: View {
     
     @ViewBuilder
     private var leftActionButton: some View {
+        // ✅ isFromLog の場合は「削除」ボタンに変更（AIに再計算ボタンは削除）
         if isFromLog {
-            secondaryButton(icon: "sparkles", title: "AIに再計算させる") {}
+            secondaryButton(icon: "trash", title: "削除") {
+                if let logId = existingLogId {
+                    MealLogsManager.shared.removeLog(id: logId)
+                    NotificationCenter.default.post(
+                        name: .showHomeToast,
+                        object: nil,
+                        userInfo: ["message": "食事を削除しました", "color": Color.orange]
+                    )
+                }
+                dismiss()
+            }
         } else if isFromManualEntry {
             secondaryButton(icon: "pencil", title: "再入力") {
                 NotificationCenter.default.post(name: .returnToManualEntry, object: nil)
@@ -431,9 +441,9 @@ struct S46_MealDetailView: View {
         editedProtein = result.totalProtein
         editedFat = result.totalFat
         editedCarbs = result.totalCarbs
-        editedSugar = result.totalSugar    // 糖分を読み込み
-        editedFiber = result.totalFiber    // 食物繊維を読み込み
-        editedSodium = result.totalSodium  // ナトリウムを読み込み
+        editedSugar = result.totalSugar
+        editedFiber = result.totalFiber
+        editedSodium = result.totalSodium
         
         currentImage = capturedImage
         
@@ -449,8 +459,6 @@ struct S46_MealDetailView: View {
     }
     
     private func fetchCharacterComment() {
-        // APIからコメントを取得（高速モード使用）
-        // 既にresult.characterCommentがある場合はスキップ
         guard result.characterComment.isEmpty || result.characterComment == "美味しそうだにゃ！🐱" else {
             return
         }
@@ -464,7 +472,10 @@ struct S46_MealDetailView: View {
                     calories: editedCalories,
                     protein: editedProtein,
                     fat: editedFat,
-                    carbs: editedCarbs
+                    carbs: editedCarbs,
+                    sugar: editedSugar,
+                    fiber: editedFiber,
+                    sodium: editedSodium
                 )
                 await MainActor.run {
                     characterComment = comment
@@ -486,7 +497,6 @@ struct S46_MealDetailView: View {
     private func saveToHome() {
         let totalCalories = editedCalories * quantity
         
-        // 栄養素を全て保存（sugar, fiber, sodium含む）
         let mealLog = MealLogEntry(
             id: existingLogId ?? UUID(),
             name: getMealName(),
@@ -494,12 +504,12 @@ struct S46_MealDetailView: View {
             protein: Int(editedProtein * Double(quantity)),
             fat: Int(editedFat * Double(quantity)),
             carbs: Int(editedCarbs * Double(quantity)),
-            sugar: Int(editedSugar * Double(quantity)),    // 糖分を保存
-            fiber: Int(editedFiber * Double(quantity)),    // 食物繊維を保存
-            sodium: Int(editedSodium * Double(quantity)),  // ナトリウムを保存
+            sugar: Int(editedSugar * Double(quantity)),
+            fiber: Int(editedFiber * Double(quantity)),
+            sodium: Int(editedSodium * Double(quantity)),
             emoji: selectEmoji(),
             date: selectedDate,
-            image: currentImage
+            image: currentImage?.jpegData(compressionQuality: 0.7)  // ✅ UIImage→Data変換
         )
         
         if isEditMode {
@@ -519,7 +529,6 @@ struct S46_MealDetailView: View {
         dismiss()
     }
     
-    // 画像も含めて保存（栄養素も含む）
     private func addToSavedMeals() {
         let mealName = getMealName()
         let savedMeal = SavedMeal(
@@ -528,11 +537,11 @@ struct S46_MealDetailView: View {
             protein: editedProtein * Double(quantity),
             fat: editedFat * Double(quantity),
             carbs: editedCarbs * Double(quantity),
-            sugar: editedSugar * Double(quantity),    // 糖分
-            fiber: editedFiber * Double(quantity),    // 食物繊維
-            sodium: editedSodium * Double(quantity),  // ナトリウム
+            sugar: editedSugar * Double(quantity),
+            fiber: editedFiber * Double(quantity),
+            sodium: editedSodium * Double(quantity),
             emoji: selectEmoji(),
-            image: currentImage
+            imageData: currentImage?.jpegData(compressionQuality: 0.7)  // ✅ UIImage→Data変換
         )
         SavedMealsManager.shared.addMeal(savedMeal)
     }

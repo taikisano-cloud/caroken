@@ -1,35 +1,37 @@
 import SwiftUI
-import UIKit
 
-// MARK: - スワイプバックジェスチャーを有効化するView Extension
+// MARK: - スワイプバック拡張
 extension View {
-    /// カスタム戻るボタン使用時もスワイプで戻れるようにする
     func enableSwipeBack() -> some View {
-        self.background(SwipeBackGestureEnabler())
+        self.background(SwipeBackGestureView())
     }
 }
 
-// MARK: - UINavigationControllerのスワイプジェスチャーを有効化
-struct SwipeBackGestureEnabler: UIViewControllerRepresentable {
+struct SwipeBackGestureView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
-        SwipeBackHostingController()
+        SwipeBackViewController()
     }
     
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
-class SwipeBackHostingController: UIViewController {
+class SwipeBackViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        
-        // NavigationControllerのinteractivePopGestureRecognizerを有効化
-        if let navigationController = self.navigationController {
-            navigationController.interactivePopGestureRecognizer?.isEnabled = true
-            navigationController.interactivePopGestureRecognizer?.delegate = nil
-        }
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        navigationController?.interactivePopGestureRecognizer?.delegate = self
     }
-    
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
+}
+
+extension SwipeBackViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+}
+
+// MARK: - キーボード隠す
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }

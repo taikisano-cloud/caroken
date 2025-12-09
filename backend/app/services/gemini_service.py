@@ -1,52 +1,32 @@
 import google.generativeai as genai
 from app.config import get_settings
 from app.models.chat import MealAnalysisResponse, DetailedMealAnalysis, FoodItem
-from typing import Optional, Literal
+from typing import Optional
 import base64
 import json
 import re
-from datetime import datetime
 
 settings = get_settings()
 
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
-# ============================================================
-# 2モデルシステム
-# - Flash: 高速応答（アドバイス、コメント、通常チャット）
-# - Pro: 深い思考（複雑な質問、詳細な分析）
-# ============================================================
-
-ChatMode = Literal["fast", "thinking"]
-
-# モデル定義
-MODEL_FLASH = "gemini-2.5-flash"  # 高速モード
-MODEL_PRO = "gemini-2.5-pro"      # 思考モード
-
-model_flash = genai.GenerativeModel(MODEL_FLASH)
-model_pro = genai.GenerativeModel(MODEL_PRO)
+# モデル設定
+# Flash-8B: 最速・軽量（アドバイス、チャット用）
+model_flash_lite = genai.GenerativeModel('gemini-1.5-flash-8b')
+# Flash: 高速・高品質（画像分析用）  
+model_flash = genai.GenerativeModel('gemini-2.0-flash-exp')
+# Pro: 高精度（複雑な分析用）
+model_pro = genai.GenerativeModel('gemini-2.5-pro')
 
 
 class GeminiService:
-    """Gemini AIサービス（2モデルシステム）"""
-    
-    @staticmethod
-    def get_model(mode: ChatMode = "fast"):
-        """モードに応じたモデルを返す"""
-        if mode == "thinking":
-            return model_pro
-        return model_flash
-    
-    # ============================================================
-    # 食事分析（糖分・食物繊維・ナトリウム対応）
-    # ============================================================
+    """Gemini AIサービス"""
     
     @staticmethod
     async def analyze_meal_image(image_base64: str) -> DetailedMealAnalysis:
         """
         食事画像を分析してカロリー・栄養素を推定
-        ※ 分析精度のためProモデルを使用
         """
         prompt = """
 あなたは栄養士AIです。この食事の画像を分析してください。
@@ -60,35 +40,26 @@ class GeminiService:
             "calories": 数値,
             "protein": 数値,
             "fat": 数値,
-            "carbs": 数値,
-            "sugar": 数値,
-            "fiber": 数値,
-            "sodium": 数値
+            "carbs": 数値
         }
     ],
     "total_calories": 数値,
     "total_protein": 数値,
     "total_fat": 数値,
     "total_carbs": 数値,
-    "total_sugar": 数値（糖分、g単位）,
-    "total_fiber": 数値（食物繊維、g単位）,
-    "total_sodium": 数値（ナトリウム、mg単位）,
+    "total_sugar": 数値,
+    "total_fiber": 数値,
+    "total_sodium": 数値,
     "character_comment": "カロちゃん（猫のキャラクター）からの一言コメント（にゃ、を語尾につけて）"
 }
-
-【重要】
-- sugar: 糖分（砂糖、果糖など）をg単位で
-- fiber: 食物繊維をg単位で
-- sodium: ナトリウムをmg単位で（塩分からの換算: 塩分g × 400 = ナトリウムmg）
-- 日本の一般的な食品の栄養価を参考に正確に推定してください
 """
         
         try:
             # Base64画像をデコード
             image_data = base64.b64decode(image_base64)
             
-            # 分析精度のためProモデルを使用
-            response = model_pro.generate_content([
+            # ✅ Flash モデルを使用（高速かつ画像分析に最適）
+            response = model_flash.generate_content([
                 prompt,
                 {"mime_type": "image/jpeg", "data": image_data}
             ])
@@ -101,17 +72,7 @@ class GeminiService:
                 result = json.loads(json_match.group())
                 
                 food_items = [
-                    FoodItem(
-                        name=item.get("name", "不明"),
-                        amount=item.get("amount", "1食分"),
-                        calories=item.get("calories", 0),
-                        protein=item.get("protein", 0),
-                        fat=item.get("fat", 0),
-                        carbs=item.get("carbs", 0),
-                        sugar=item.get("sugar", 0),
-                        fiber=item.get("fiber", 0),
-                        sodium=item.get("sodium", 0)
-                    ) for item in result.get("food_items", [])
+                    FoodItem(**item) for item in result.get("food_items", [])
                 ]
                 
                 return DetailedMealAnalysis(
@@ -129,7 +90,6 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
-            print(f"Gemini API Error (analyze_image): {e}")
             # エラー時のフォールバック
             return DetailedMealAnalysis(
                 food_items=[
@@ -139,10 +99,7 @@ class GeminiService:
                         calories=0,
                         protein=0,
                         fat=0,
-                        carbs=0,
-                        sugar=0,
-                        fiber=0,
-                        sodium=0
+                        carbs=0
                     )
                 ],
                 total_calories=0,
@@ -152,14 +109,13 @@ class GeminiService:
                 total_sugar=0,
                 total_fiber=0,
                 total_sodium=0,
-                character_comment="ごめんにゃ、分析できなかったにゃ...😿 もう一度試してほしいにゃ！"
+                character_comment=f"ごめんにゃ、分析できなかったにゃ...😿 もう一度試してほしいにゃ！"
             )
     
     @staticmethod
     async def analyze_meal_text(description: str) -> DetailedMealAnalysis:
         """
         テキストから食事のカロリー・栄養素を推定
-        ※ 分析精度のためProモデルを使用
         """
         prompt = f"""
 あなたは栄養士AIです。以下の食事内容を分析してカロリーと栄養素を推定してください。
@@ -175,32 +131,23 @@ class GeminiService:
             "calories": 数値,
             "protein": 数値,
             "fat": 数値,
-            "carbs": 数値,
-            "sugar": 数値,
-            "fiber": 数値,
-            "sodium": 数値
+            "carbs": 数値
         }}
     ],
     "total_calories": 数値,
     "total_protein": 数値,
     "total_fat": 数値,
     "total_carbs": 数値,
-    "total_sugar": 数値（糖分、g単位）,
-    "total_fiber": 数値（食物繊維、g単位）,
-    "total_sodium": 数値（ナトリウム、mg単位）,
+    "total_sugar": 数値,
+    "total_fiber": 数値,
+    "total_sodium": 数値,
     "character_comment": "カロちゃん（猫のキャラクター）からの一言コメント（にゃ、を語尾につけて）"
 }}
-
-【重要】
-- sugar: 糖分（砂糖、果糖など）をg単位で
-- fiber: 食物繊維をg単位で  
-- sodium: ナトリウムをmg単位で（塩分からの換算: 塩分g × 400 = ナトリウムmg）
-- 日本の一般的な食品の栄養価を参考に正確に推定してください
 """
         
         try:
-            # 分析精度のためProモデルを使用
-            response = model_pro.generate_content(prompt)
+            # ✅ Flash モデルを使用（高速）
+            response = model_flash.generate_content(prompt)
             result_text = response.text
             json_match = re.search(r'\{[\s\S]*\}', result_text)
             
@@ -208,17 +155,7 @@ class GeminiService:
                 result = json.loads(json_match.group())
                 
                 food_items = [
-                    FoodItem(
-                        name=item.get("name", "不明"),
-                        amount=item.get("amount", "1食分"),
-                        calories=item.get("calories", 0),
-                        protein=item.get("protein", 0),
-                        fat=item.get("fat", 0),
-                        carbs=item.get("carbs", 0),
-                        sugar=item.get("sugar", 0),
-                        fiber=item.get("fiber", 0),
-                        sodium=item.get("sodium", 0)
-                    ) for item in result.get("food_items", [])
+                    FoodItem(**item) for item in result.get("food_items", [])
                 ]
                 
                 return DetailedMealAnalysis(
@@ -236,7 +173,6 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
-            print(f"Gemini API Error (analyze_text): {e}")
             return DetailedMealAnalysis(
                 food_items=[
                     FoodItem(
@@ -245,10 +181,7 @@ class GeminiService:
                         calories=300,
                         protein=15,
                         fat=10,
-                        carbs=40,
-                        sugar=5,
-                        fiber=3,
-                        sodium=500
+                        carbs=40
                     )
                 ],
                 total_calories=300,
@@ -261,31 +194,18 @@ class GeminiService:
                 character_comment="分析が難しかったから概算だにゃ！参考程度にしてほしいにゃ🐱"
             )
     
-    # ============================================================
-    # チャット機能（2モデル対応）
-    # ============================================================
-    
     @staticmethod
     async def chat(
         message: str,
         user_context: Optional[dict] = None,
         image_base64: Optional[str] = None,
         chat_history: Optional[list] = None,
-        mode: ChatMode = "fast"
+        mode: str = "fast"  # ✅ モードパラメータを追加
     ) -> str:
         """
-        カロちゃんとのチャット（2モデル対応）
-        
-        Args:
-            message: ユーザーのメッセージ
-            user_context: ユーザー情報（身体情報、今日の摂取状況など）
-            image_base64: 画像（Base64エンコード）
-            chat_history: 会話履歴
-            mode: "fast"（高速）or "thinking"（思考）
+        カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
+        mode: "fast" = 高速モード（Flash-8B）, "thinking" = 思考モード（Flash）
         """
-        # モデル選択
-        model = GeminiService.get_model(mode)
-        
         context = ""
         if user_context:
             # 基本情報
@@ -359,23 +279,6 @@ class GeminiService:
                 role = "ユーザー" if msg.get('is_user') else "カロちゃん"
                 history_text += f"{role}: {msg.get('message', '')}\n"
         
-        # モードによってプロンプトを調整
-        if mode == "thinking":
-            mode_instruction = """
-【思考モード】
-- じっくり考えて、詳しく丁寧に回答する
-- 栄養学的な根拠や理由も説明する
-- 複雑な質問にも対応する
-- 3-6文程度で回答する
-"""
-        else:
-            mode_instruction = """
-【高速モード】
-- 簡潔に素早く回答する
-- 要点を絞って伝える
-- 2-3文程度で回答する
-"""
-        
         system_prompt = f"""
 あなたは「カロちゃん」という名前の可愛い猫のAIアシスタントです。
 カロ研（カロリー研究）アプリのマスコットキャラクターとして、ユーザーの健康管理をサポートします。
@@ -386,8 +289,6 @@ class GeminiService:
 - 絵文字を適度に使う（🐱😊🔥💪🍽️など）
 - 専門的なアドバイスも分かりやすく伝える
 - ユーザーの食事や健康について具体的なアドバイスをする
-
-{mode_instruction}
 
 【重要】
 - ユーザーの情報（性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
@@ -403,28 +304,30 @@ class GeminiService:
 【現在のユーザーのメッセージ】
 {message}
 
-カロちゃんとして自然に返答してください:
+カロちゃんとして自然に返答してください（2-4文程度）:
 """
         
         try:
+            # ✅ モードに応じてモデルを選択
             if image_base64:
                 image_data = base64.b64decode(image_base64)
-                response = model.generate_content([
+                # 画像付きの場合は常にFlashモデル
+                response = model_flash.generate_content([
                     system_prompt,
                     {"mime_type": "image/jpeg", "data": image_data}
                 ])
+            elif mode == "thinking":
+                # 思考モード: Flashモデル（より詳細な回答）
+                response = model_flash.generate_content(system_prompt)
             else:
-                response = model.generate_content(system_prompt)
+                # 高速モード: Flash-8Bモデル（最速）
+                response = model_flash_lite.generate_content(system_prompt)
             
             return response.text.strip()
             
         except Exception as e:
-            print(f"Gemini API Error (chat): {e}")
+            print(f"Gemini API Error: {e}")
             return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
-    
-    # ============================================================
-    # ホーム画面用アドバイス生成（Flash使用）
-    # ============================================================
     
     @staticmethod
     async def generate_advice(
@@ -437,12 +340,13 @@ class GeminiService:
         meal_count: int
     ) -> str:
         """
-        ホーム画面用のアドバイスを生成（Flashモデル使用）
+        ホーム画面用のアドバイスを生成
         """
         remaining = goal_calories - today_calories
         progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
         
         # 時間帯を考慮
+        from datetime import datetime
         hour = datetime.now().hour
         time_context = ""
         if hour < 10:
@@ -482,69 +386,12 @@ class GeminiService:
 """
         
         try:
-            # Flashモデルで高速応答
-            response = model_flash.generate_content(prompt)
+            # ✅ Flash-Lite モデルを使用（最速・アドバイス生成に最適）
+            response = model_flash_lite.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             print(f"Gemini API Error (advice): {e}")
             return "今日も一緒にがんばろうにゃ！🐱"
-    
-    # ============================================================
-    # 食事詳細画面用コメント生成（Flash使用）
-    # ============================================================
-    
-    @staticmethod
-    async def generate_meal_comment(
-        meal_name: str,
-        calories: int,
-        protein: float,
-        fat: float,
-        carbs: float,
-        sugar: float = 0,
-        fiber: float = 0,
-        sodium: float = 0
-    ) -> str:
-        """
-        食事詳細画面用のカロちゃんコメントを生成（Flashモデル使用）
-        """
-        prompt = f"""
-あなたは「カロちゃん」という猫のAIアシスタントです。
-
-【食事内容】
-- 料理名: {meal_name}
-- カロリー: {calories}kcal
-- たんぱく質: {protein}g
-- 脂質: {fat}g
-- 炭水化物: {carbs}g
-- 糖分: {sugar}g
-- 食物繊維: {fiber}g
-- ナトリウム: {sodium}mg
-
-【指示】
-この食事について一言コメントしてください。
-- 1文で簡潔に
-- 語尾に「にゃ」をつける
-- 絵文字を1個使う
-- 栄養バランスや特徴について触れる
-- ポジティブなトーンで
-
-例:
-- 「タンパク質たっぷりで筋肉にいいにゃ💪」
-- 「野菜も一緒に食べるとバランスいいにゃ🥗」
-- 「美味しそう！エネルギー補給バッチリだにゃ🔥」
-"""
-        
-        try:
-            # Flashモデルで高速応答
-            response = model_flash.generate_content(prompt)
-            return response.text.strip()
-        except Exception as e:
-            print(f"Gemini API Error (meal_comment): {e}")
-            return "美味しそうだにゃ！🐱"
-    
-    # ============================================================
-    # メモリ抽出（将来の記憶機能用）
-    # ============================================================
     
     @staticmethod
     async def extract_memory(message: str, response: str) -> Optional[dict]:
@@ -578,14 +425,15 @@ class GeminiService:
 """
         
         try:
-            # Flashモデルで高速処理
-            result = model_flash.generate_content(prompt)
+            # ✅ Flash-Lite モデルを使用（高速）
+            result = model_flash_lite.generate_content(prompt)
             text = result.text.strip()
             
             if text.lower() == "null" or text == "":
                 return None
             
             # JSONをパース
+            import json
             # ```json などのマークダウンを除去
             if "```" in text:
                 text = text.split("```")[1]

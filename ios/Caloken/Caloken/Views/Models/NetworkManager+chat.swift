@@ -7,13 +7,6 @@ import Foundation
 extension NetworkManager {
     
     /// カロちゃんチャットAPI（モード対応版）
-    /// - Parameters:
-    ///   - message: ユーザーメッセージ
-    ///   - imageBase64: 画像（Base64エンコード、オプション）
-    ///   - chatHistory: 会話履歴
-    ///   - userContext: ユーザーコンテキスト
-    ///   - mode: "fast"（高速）または "thinking"（思考）
-    /// - Returns: カロちゃんの返答
     func sendChatWithUserContext(
         message: String,
         imageBase64: String?,
@@ -22,7 +15,11 @@ extension NetworkManager {
         mode: String = "fast"
     ) async throws -> String {
         
-        let endpoint = "\(baseURL)/api/chat"
+        // ✅ 正しいエンドポイント
+        let endpoint = "\(baseURL)/v1/chat"
+        
+        print("💬 Chat Request: \(endpoint)")
+        print("  - Mode: \(mode)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -31,10 +28,6 @@ extension NetworkManager {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
         
         var body: [String: Any] = [
             "message": message,
@@ -55,7 +48,12 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
+        print("  - Status: \(httpResponse.statusCode)")
+        
         guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("  - Error: \(errorString)")
+            }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
@@ -67,7 +65,7 @@ extension NetworkManager {
         return responseText
     }
     
-    /// ホーム画面アドバイスAPI（高速モード固定）
+    /// ホーム画面アドバイスAPI（Flashモデル使用 - 高速）
     func fetchHomeAdvice(
         todayCalories: Int,
         goalCalories: Int,
@@ -78,7 +76,10 @@ extension NetworkManager {
         mealCount: Int
     ) async throws -> String {
         
-        let endpoint = "\(baseURL)/api/advice"
+        // ✅ 正しいエンドポイント（Flashモデル使用）
+        let endpoint = "\(baseURL)/v1/advice"
+        
+        print("📝 Advice Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -87,10 +88,6 @@ extension NetworkManager {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
         
         let body: [String: Any] = [
             "today_calories": todayCalories,
@@ -106,9 +103,17 @@ extension NetworkManager {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        print("  - Status: \(httpResponse.statusCode)")
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("  - Error: \(errorString)")
+            }
+            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -119,7 +124,7 @@ extension NetworkManager {
         return advice
     }
     
-    /// 食事コメント生成API（高速モード固定）
+    /// 食事コメント生成API（Flashモデル使用 - 高速）
     func fetchMealComment(
         mealName: String,
         calories: Int,
@@ -131,7 +136,10 @@ extension NetworkManager {
         sodium: Double = 0
     ) async throws -> String {
         
-        let endpoint = "\(baseURL)/api/meal-comment"
+        // ✅ 正しいエンドポイント
+        let endpoint = "\(baseURL)/v1/meal-comment"
+        
+        print("🍽️ Meal Comment Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -140,10 +148,6 @@ extension NetworkManager {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
         
         let body: [String: Any] = [
             "meal_name": mealName,
@@ -160,9 +164,17 @@ extension NetworkManager {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        print("  - Status: \(httpResponse.statusCode)")
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("  - Error: \(errorString)")
+            }
+            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -174,11 +186,8 @@ extension NetworkManager {
     }
 }
 
-// ※ NetworkErrorはNetworkManager.swiftで定義済み
-
 // MARK: - HomeAdviceManager互換
 extension NetworkManager {
-    /// HomeAdviceManager互換メソッド
     func getHomeAdvice(
         todayCalories: Int,
         goalCalories: Int,
@@ -203,9 +212,13 @@ extension NetworkManager {
 // MARK: - 食事分析API
 extension NetworkManager {
     
-    /// 食事画像を分析
+    /// 食事画像を分析（Proモデル使用）
     func analyzeMeal(imageBase64: String) async throws -> MealAnalysisData {
-        let endpoint = "\(baseURL)/api/analyze-meal"
+        // ✅ 正しいエンドポイント
+        let endpoint = "\(baseURL)/v1/analyze-meal"
+        
+        print("🍽️ Meal Analysis (Image):")
+        print("  - URL: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -214,10 +227,6 @@ extension NetworkManager {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
         
         let body: [String: Any] = [
             "image_base64": imageBase64
@@ -227,19 +236,37 @@ extension NetworkManager {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        print("  - Status: \(httpResponse.statusCode)")
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("  - Error: \(errorString)")
+            }
+            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
+        }
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("  - Response: \(jsonString.prefix(300))...")
         }
         
         let decoder = JSONDecoder()
+        // レスポンスは { "analysis": { ... } } 形式
         let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
         return apiResponse.analysis
     }
     
-    /// 食事テキストを分析
+    /// 食事テキストを分析（Proモデル使用）
     func analyzeMeal(description: String) async throws -> MealAnalysisData {
-        let endpoint = "\(baseURL)/api/analyze-meal"
+        // ✅ 正しいエンドポイント
+        let endpoint = "\(baseURL)/v1/analyze-meal"
+        
+        print("🍽️ Meal Analysis (Text):")
+        print("  - URL: \(endpoint)")
+        print("  - Description: \(description)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -249,10 +276,6 @@ extension NetworkManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        
         let body: [String: Any] = [
             "description": description
         ]
@@ -261,12 +284,25 @@ extension NetworkManager {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NetworkError.invalidResponse
+        }
+        
+        print("  - Status: \(httpResponse.statusCode)")
+        
+        guard httpResponse.statusCode == 200 else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("  - Error: \(errorString)")
+            }
+            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
+        }
+        
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("  - Response: \(jsonString.prefix(300))...")
         }
         
         let decoder = JSONDecoder()
+        // レスポンスは { "analysis": { ... } } 形式
         let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
         return apiResponse.analysis
     }

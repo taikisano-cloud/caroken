@@ -207,7 +207,7 @@ struct MetricsTabView: View {
     }
 }
 
-// MARK: - カロリー + アドバイスカード（API対応）
+// MARK: - カロリー + アドバイスカード（食事記録時のみ更新）
 struct CalorieWithAdviceCard: View {
     @Binding var selectedDate: Date
     @Binding var showNutritionGoal: Bool
@@ -218,12 +218,25 @@ struct CalorieWithAdviceCard: View {
     
     @State private var adviceText: String = "今日も一緒にがんばろうにゃ！🐱"
     @State private var isLoadingAdvice: Bool = false
-    @State private var lastFetchedDate: Date? = nil
+    @State private var hasLoadedInitialAdvice: Bool = false  // ✅ 初回読み込みフラグ
+    @State private var lastMealLogHash: Int = 0  // ✅ 食事ログのハッシュで変更を検出
     
     var baseTarget: Int { profileManager.calorieGoal }
     var exerciseBonus: Int { exerciseLogsManager.totalCaloriesBurned(for: selectedDate) }
     var target: Int { baseTarget + exerciseBonus }
     var current: Int { logsManager.totalCalories(for: selectedDate) }
+    
+    // 食事ログのハッシュ値を計算（変更検出用）
+    private var currentMealLogHash: Int {
+        let logs = logsManager.logs(for: selectedDate)
+        var hasher = Hasher()
+        hasher.combine(logs.count)
+        for log in logs {
+            hasher.combine(log.id)
+            hasher.combine(log.calories)
+        }
+        return hasher.finalize()
+    }
     
     var progressRatio: Double {
         guard target > 0 else { return 0 }
@@ -311,7 +324,7 @@ struct CalorieWithAdviceCard: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // アドバイスカード（API対応）
+            // アドバイスカード
             Button { showChat = true } label: {
                 HStack(alignment: .center, spacing: 0) {
                     Image("caloken_full")
@@ -366,33 +379,50 @@ struct CalorieWithAdviceCard: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .onAppear {
-            fetchAdviceIfNeeded()
+            // ✅ 初回のみアドバイスを取得
+            if !hasLoadedInitialAdvice {
+                lastMealLogHash = currentMealLogHash
+                fetchAdvice()
+                hasLoadedInitialAdvice = true
+            }
         }
-        .onChange(of: selectedDate) { _, newDate in
-            fetchAdviceIfNeeded()
+        .onChange(of: selectedDate) { _, _ in
+            // ✅ 日付変更時はアドバイスを更新
+            lastMealLogHash = currentMealLogHash
+            fetchAdvice()
         }
-        .onChange(of: current) { _, _ in
-            fetchAdviceIfNeeded()
+        // ✅ 食事ログ追加通知を受け取ったら更新
+        .onReceive(NotificationCenter.default.publisher(for: .mealLogAdded)) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let newHash = currentMealLogHash
+                if newHash != lastMealLogHash {
+                    lastMealLogHash = newHash
+                    fetchAdvice()
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealLogUpdated)) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let newHash = currentMealLogHash
+                if newHash != lastMealLogHash {
+                    lastMealLogHash = newHash
+                    fetchAdvice()
+                }
+            }
         }
     }
     
-    // MARK: - APIからアドバイスを取得
-    private func fetchAdviceIfNeeded() {
-        // 同じ日で既に取得済みならスキップ（5分間隔で更新）
-        if let lastDate = lastFetchedDate,
-           Calendar.current.isDate(lastDate, inSameDayAs: selectedDate),
-           Date().timeIntervalSince(lastDate) < 300 {
-            return
-        }
-        
+    // MARK: - APIからアドバイスを取得（Flash-Liteモデル使用 - 最速）
+    private func fetchAdvice() {
         isLoadingAdvice = true
         
         Task {
             do {
                 let nutrients = logsManager.totalNutrients(for: selectedDate)
-                let mealCount = logsManager.logs(for: selectedDate).count
+                let currentMealCount = logsManager.logs(for: selectedDate).count
                 let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }.joined(separator: "、")
                 
+                // ✅ /v1/advice エンドポイントはFlashモデルを使用（高速）
                 let advice = try await NetworkManager.shared.fetchHomeAdvice(
                     todayCalories: current,
                     goalCalories: target,
@@ -400,20 +430,17 @@ struct CalorieWithAdviceCard: View {
                     todayFat: nutrients.fat,
                     todayCarbs: nutrients.carbs,
                     todayMeals: todayMeals,
-                    mealCount: mealCount
+                    mealCount: currentMealCount
                 )
                 
                 await MainActor.run {
                     adviceText = advice
                     isLoadingAdvice = false
-                    lastFetchedDate = Date()
                 }
             } catch {
                 await MainActor.run {
-                    // エラー時はローカルのフォールバックを使用
                     adviceText = generateLocalAdvice()
                     isLoadingAdvice = false
-                    lastFetchedDate = Date()
                 }
             }
         }

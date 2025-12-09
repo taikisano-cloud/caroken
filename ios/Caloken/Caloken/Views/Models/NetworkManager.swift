@@ -7,7 +7,7 @@ class NetworkManager {
     
     // バックエンドのベースURL
     #if DEBUG
-    let baseURL = "http://localhost:8000"
+    let baseURL = "https://caroken-production.up.railway.app/api"
     #else
     let baseURL = "https://api.caloken.app"
     #endif

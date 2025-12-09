@@ -4,8 +4,8 @@ import Combine
 // MARK: - 最近のログカード
 struct RecentLogsCard: View {
     @Binding var selectedDate: Date
-    @StateObject private var mealLogsManager = MealLogsManager.shared
-    @StateObject private var exerciseLogsManager = ExerciseLogsManager.shared
+    @ObservedObject private var mealLogsManager = MealLogsManager.shared
+    @ObservedObject private var exerciseLogsManager = ExerciseLogsManager.shared
     
     var mealLogs: [MealLogEntry] {
         mealLogsManager.logs(for: selectedDate)
@@ -60,7 +60,7 @@ struct RecentLogsCard: View {
                 ForEach(mealLogs) { log in
                     CompactMealLogCard(log: log) {
                         withAnimation(.easeOut(duration: 0.3)) {
-                            mealLogsManager.removeLog(log)
+                            mealLogsManager.removeLog(id: log.id)
                         }
                     }
                 }
@@ -69,7 +69,7 @@ struct RecentLogsCard: View {
                 ForEach(exerciseLogs) { log in
                     CompactExerciseLogCard(log: log) {
                         withAnimation(.easeOut(duration: 0.3)) {
-                            exerciseLogsManager.removeLog(log)
+                            exerciseLogsManager.removeLog(id: log.id)
                         }
                     }
                 }
@@ -149,8 +149,9 @@ struct CompactMealLogCard: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 24))
                             .foregroundColor(.red)
-                    } else if let image = log.image {
-                        Image(uiImage: image)
+                    } else if let uiImage = log.uiImage {
+                        // ✅ log.uiImageを使用（Data→UIImage変換済み）
+                        Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFill()
                             .frame(width: 60, height: 60)
@@ -160,9 +161,8 @@ struct CompactMealLogCard: View {
                             .fill(Color(UIColor.systemGray5))
                             .frame(width: 60, height: 60)
                         
-                        Image(systemName: "pencil")
-                            .font(.system(size: 24))
-                            .foregroundColor(.secondary)
+                        Text(log.emoji)
+                            .font(.system(size: 28))
                     }
                 }
                 
@@ -176,7 +176,7 @@ struct CompactMealLogCard: View {
                                 .foregroundColor(.red)
                                 .lineLimit(1)
                         } else {
-                            Text(log.isAnalyzing ? "分析中..." : log.name)
+                            Text(log.isAnalyzing ? "分析中... \(log.analysisProgress)%" : log.name)
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(log.isAnalyzing ? .secondary : .primary)
                                 .lineLimit(1)
@@ -290,18 +290,18 @@ struct CompactMealLogCard: View {
         .sheet(isPresented: $showDetail) {
             S46_MealDetailView(
                 result: MealAnalysisData(
-                    foodItems: [MealFoodItem(name: log.name, amount: "1食分", calories: log.calories, protein: Double(log.protein), fat: Double(log.fat), carbs: Double(log.carbs), sugar: 0, fiber: 0, sodium: 0)],
+                    foodItems: [MealFoodItem(name: log.name, amount: "1食分", calories: log.calories, protein: Double(log.protein), fat: Double(log.fat), carbs: Double(log.carbs), sugar: Double(log.sugar), fiber: Double(log.fiber), sodium: Double(log.sodium))],
                     totalCalories: log.calories,
                     totalProtein: Double(log.protein),
                     totalFat: Double(log.fat),
                     totalCarbs: Double(log.carbs),
-                    totalSugar: 0,
-                    totalFiber: 0,
-                    totalSodium: 0,
+                    totalSugar: Double(log.sugar),
+                    totalFiber: Double(log.fiber),
+                    totalSodium: Double(log.sodium),
                     mealImage: nil,
                     characterComment: "\(log.name)だね！\nおいしそう〜🍴"
                 ),
-                capturedImage: log.image,
+                capturedImage: log.uiImage,  // ✅ UIImage?を渡す
                 existingLogId: log.id,
                 existingLogDate: log.date,
                 isFromLog: true
@@ -521,12 +521,14 @@ struct CompactExerciseLogCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .sheet(isPresented: $showDetail) {
+            // ✅ exerciseTypeを使用（iconではない）
             S51_ExerciseDetailView(
                 exercise: SavedExerciseItem(
                     name: log.name,
                     duration: log.duration,
                     caloriesBurned: log.caloriesBurned,
-                    icon: log.icon
+                    exerciseType: log.exerciseType,
+                    intensity: log.intensity
                 ),
                 existingLogId: log.id,
                 existingLogDate: log.date

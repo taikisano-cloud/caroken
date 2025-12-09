@@ -290,7 +290,9 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "音声入力で食事や運動を記録するために使用します";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -344,7 +346,9 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "音声入力で食事や運動を記録するために使用します";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

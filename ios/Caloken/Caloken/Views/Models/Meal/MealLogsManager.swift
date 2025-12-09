@@ -1,45 +1,63 @@
 import SwiftUI
 import Combine
 
-// MARK: - 食事ログのモデル
-struct MealLogEntry: Identifiable, Codable {
-    let id: UUID
+// MARK: - 食事ログのエントリー
+struct MealLogEntry: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
     var name: String
     var calories: Int
     var protein: Int
     var fat: Int
     var carbs: Int
-    var sugar: Int       // 糖分（g）← 追加
-    var fiber: Int       // 食物繊維（g）← 追加
-    var sodium: Int      // ナトリウム（mg）← 追加
+    var sugar: Int          // ✅ 糖質
+    var fiber: Int          // ✅ 食物繊維
+    var sodium: Int         // ✅ ナトリウム(mg)
     var emoji: String
     var date: Date
-    var hasImage: Bool
-    var isBookmarked: Bool
+    var time: Date
+    var image: Data?
     var isAnalyzing: Bool
-    var analyzingStartedAt: Date?
-    var isAnalyzingError: Bool
+    var isAnalyzingError: Bool  // ✅ 追加
+    var hasTimedOut: Bool       // ✅ 追加
+    var analysisProgress: Int   // ✅ 分析進捗（0-100%）
     
-    // タイムアウト時間（秒）
-    static let analysisTimeout: TimeInterval = 30
+    // ✅ iconはemojiを返す（互換性のため）
+    var icon: String {
+        emoji
+    }
     
+    // ✅ UIImage取得用（Data→UIImage変換）
+    var uiImage: UIImage? {
+        guard let data = image else { return nil }
+        return UIImage(data: data)
+    }
+    
+    // ✅ 時刻文字列
+    var timeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
+    }
+    
+    // ✅ 後方互換性のあるイニシャライザ
     init(
         id: UUID = UUID(),
-        name: String,
-        calories: Int,
-        protein: Int,
-        fat: Int,
-        carbs: Int,
+        name: String = "",
+        calories: Int = 0,
+        protein: Int = 0,
+        fat: Int = 0,
+        carbs: Int = 0,
         sugar: Int = 0,
         fiber: Int = 0,
         sodium: Int = 0,
         emoji: String = "🍽️",
         date: Date = Date(),
-        image: UIImage? = nil,
-        isBookmarked: Bool = false,
+        time: Date? = nil,
+        image: Data? = nil,
         isAnalyzing: Bool = false,
-        analyzingStartedAt: Date? = nil,
-        isAnalyzingError: Bool = false
+        isAnalyzingError: Bool = false,
+        hasTimedOut: Bool = false,
+        analysisProgress: Int = 0
     ) {
         self.id = id
         self.name = name
@@ -52,23 +70,15 @@ struct MealLogEntry: Identifiable, Codable {
         self.sodium = sodium
         self.emoji = emoji
         self.date = date
-        self.hasImage = image != nil
-        self.isBookmarked = isBookmarked
+        self.time = time ?? date
+        self.image = image
         self.isAnalyzing = isAnalyzing
-        self.analyzingStartedAt = isAnalyzing ? (analyzingStartedAt ?? Date()) : nil
         self.isAnalyzingError = isAnalyzingError
-        
-        if let image = image {
-            MealImageStorage.shared.saveImage(image, for: id)
-        }
+        self.hasTimedOut = hasTimedOut
+        self.analysisProgress = analysisProgress
     }
     
-    // Codable: 後方互換性のためのデコード
-    enum CodingKeys: String, CodingKey {
-        case id, name, calories, protein, fat, carbs, sugar, fiber, sodium
-        case emoji, date, hasImage, isBookmarked, isAnalyzing, analyzingStartedAt, isAnalyzingError
-    }
-    
+    // ✅ Codable - 旧データ対応
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -77,163 +87,51 @@ struct MealLogEntry: Identifiable, Codable {
         protein = try container.decode(Int.self, forKey: .protein)
         fat = try container.decode(Int.self, forKey: .fat)
         carbs = try container.decode(Int.self, forKey: .carbs)
-        // 新フィールド: なければ0（後方互換性）
         sugar = try container.decodeIfPresent(Int.self, forKey: .sugar) ?? 0
         fiber = try container.decodeIfPresent(Int.self, forKey: .fiber) ?? 0
         sodium = try container.decodeIfPresent(Int.self, forKey: .sodium) ?? 0
         emoji = try container.decode(String.self, forKey: .emoji)
         date = try container.decode(Date.self, forKey: .date)
-        hasImage = try container.decode(Bool.self, forKey: .hasImage)
-        isBookmarked = try container.decodeIfPresent(Bool.self, forKey: .isBookmarked) ?? false
+        time = try container.decodeIfPresent(Date.self, forKey: .time) ?? date
+        image = try container.decodeIfPresent(Data.self, forKey: .image)
         isAnalyzing = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzing) ?? false
-        analyzingStartedAt = try container.decodeIfPresent(Date.self, forKey: .analyzingStartedAt)
         isAnalyzingError = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzingError) ?? false
-    }
-    
-    // タイムアウトしているかどうか
-    var hasTimedOut: Bool {
-        guard isAnalyzing, let startedAt = analyzingStartedAt else { return false }
-        return Date().timeIntervalSince(startedAt) > MealLogEntry.analysisTimeout
-    }
-    
-    var image: UIImage? {
-        guard hasImage else { return nil }
-        return MealImageStorage.shared.loadImage(for: id)
-    }
-    
-    var timeString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
-    }
-    
-    var dateString: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M/d"
-        return formatter.string(from: date)
-    }
-}
-
-// MARK: - 画像ストレージ
-class MealImageStorage {
-    static let shared = MealImageStorage()
-    
-    private let fileManager = FileManager.default
-    private var imageDirectory: URL {
-        let paths = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
-        let directory = paths[0].appendingPathComponent("MealImages", isDirectory: true)
-        
-        if !fileManager.fileExists(atPath: directory.path) {
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        
-        return directory
-    }
-    
-    private init() {
-        _ = imageDirectory
-    }
-    
-    func saveImage(_ image: UIImage, for id: UUID) {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        let resizedImage = resizeImage(image, maxSize: 800)
-        
-        if let data = resizedImage.jpegData(compressionQuality: 0.6) {
-            try? data.write(to: url)
-        }
-    }
-    
-    func loadImage(for id: UUID) -> UIImage? {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
-    }
-    
-    func imageExists(for id: UUID) -> Bool {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        return fileManager.fileExists(atPath: url.path)
-    }
-    
-    func deleteImage(for id: UUID) {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        try? fileManager.removeItem(at: url)
-    }
-    
-    private func resizeImage(_ image: UIImage, maxSize: CGFloat) -> UIImage {
-        let size = image.size
-        let ratio = min(maxSize / size.width, maxSize / size.height)
-        
-        if ratio >= 1 { return image }
-        
-        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
-        }
+        hasTimedOut = try container.decodeIfPresent(Bool.self, forKey: .hasTimedOut) ?? false
+        analysisProgress = try container.decodeIfPresent(Int.self, forKey: .analysisProgress) ?? 0
     }
 }
 
 // MARK: - 食事ログマネージャー
-class MealLogsManager: ObservableObject {
+final class MealLogsManager: ObservableObject {
     static let shared = MealLogsManager()
     
-    @Published var allLogs: [MealLogEntry] = []
+    @Published private(set) var allLogs: [MealLogEntry] = []
     
-    // バージョンアップ（sugar/fiber/sodium追加）
-    private let userDefaultsKey = "mealLogEntries_v6"
-    private let oldUserDefaultsKey = "mealLogEntries_v5"
+    private let userDefaultsKey = "mealLogs"
     
     private init() {
         loadLogs()
     }
     
+    // MARK: - 日付でフィルタリング
     func logs(for date: Date) -> [MealLogEntry] {
         let calendar = Calendar.current
-        return allLogs
-            .filter { calendar.isDate($0.date, inSameDayAs: date) }
-            .sorted { $0.date > $1.date }
+        return allLogs.filter { calendar.isDate($0.date, inSameDayAs: date) }
+            .sorted { $0.time > $1.time }
     }
     
-    func totalCalories(for date: Date) -> Int {
-        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.calories }
-    }
-    
-    func totalNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int) {
-        let dayLogs = logs(for: date).filter { !$0.isAnalyzing }
-        return (
-            protein: dayLogs.reduce(0) { $0 + $1.protein },
-            fat: dayLogs.reduce(0) { $0 + $1.fat },
-            carbs: dayLogs.reduce(0) { $0 + $1.carbs }
-        )
-    }
-    
-    /// 詳細栄養素を取得（sugar/fiber/sodium含む）
-    func detailedNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
-        let dayLogs = logs(for: date).filter { !$0.isAnalyzing }
-        return (
-            protein: dayLogs.reduce(0) { $0 + $1.protein },
-            fat: dayLogs.reduce(0) { $0 + $1.fat },
-            carbs: dayLogs.reduce(0) { $0 + $1.carbs },
-            sugar: dayLogs.reduce(0) { $0 + $1.sugar },
-            fiber: dayLogs.reduce(0) { $0 + $1.fiber },
-            sodium: dayLogs.reduce(0) { $0 + $1.sodium }
-        )
-    }
-    
+    // MARK: - ログ追加
     func addLog(_ log: MealLogEntry) {
-        allLogs.insert(log, at: 0)
+        allLogs.append(log)
         saveLogs()
         NotificationCenter.default.post(name: .mealLogAdded, object: nil)
     }
     
-    // 分析中のログを追加
+    // MARK: - 分析中ログ追加
     func addAnalyzingLog(image: UIImage?, for date: Date) -> UUID {
-        let id = UUID()
+        let imageData = image?.jpegData(compressionQuality: 0.7)
         let log = MealLogEntry(
-            id: id,
-            name: "分析中...",
+            name: "",
             calories: 0,
             protein: 0,
             fat: 0,
@@ -243,17 +141,16 @@ class MealLogsManager: ObservableObject {
             sodium: 0,
             emoji: "🔄",
             date: date,
-            image: image,
-            isBookmarked: false,
+            time: Date(),
+            image: imageData,
             isAnalyzing: true
         )
-        allLogs.insert(log, at: 0)
+        allLogs.append(log)
         saveLogs()
-        NotificationCenter.default.post(name: .mealLogAdded, object: nil)
-        return id
+        return log.id
     }
     
-    // 分析完了後にログを更新（sugar/fiber/sodium対応）
+    // MARK: - 分析完了 ✅ sugar/fiber/sodium対応
     func completeAnalyzing(
         id: UUID,
         name: String,
@@ -277,11 +174,21 @@ class MealLogsManager: ObservableObject {
             allLogs[index].sodium = sodium
             allLogs[index].emoji = emoji
             allLogs[index].isAnalyzing = false
+            allLogs[index].analysisProgress = 100
             saveLogs()
             NotificationCenter.default.post(name: .mealLogUpdated, object: nil)
         }
     }
     
+    // MARK: - 分析進捗更新
+    func updateAnalysisProgress(id: UUID, progress: Int) {
+        if let index = allLogs.firstIndex(where: { $0.id == id }) {
+            allLogs[index].analysisProgress = min(max(progress, 0), 100)
+            // saveLogs()は頻繁に呼ばないように
+        }
+    }
+    
+    // MARK: - ログ更新
     func updateLog(_ log: MealLogEntry) {
         if let index = allLogs.firstIndex(where: { $0.id == log.id }) {
             allLogs[index] = log
@@ -290,86 +197,98 @@ class MealLogsManager: ObservableObject {
         }
     }
     
-    func removeLog(_ log: MealLogEntry) {
-        MealImageStorage.shared.deleteImage(for: log.id)
-        allLogs.removeAll { $0.id == log.id }
-        saveLogs()
-    }
-    
+    // MARK: - ログ削除
     func removeLog(id: UUID) {
-        MealImageStorage.shared.deleteImage(for: id)
         allLogs.removeAll { $0.id == id }
         saveLogs()
+        NotificationCenter.default.post(name: .mealLogDeleted, object: nil)
     }
     
-    func getLog(id: UUID) -> MealLogEntry? {
-        allLogs.first { $0.id == id }
-    }
-    
-    func hasLogs(for date: Date) -> Bool {
-        let calendar = Calendar.current
-        return allLogs.contains { calendar.isDate($0.date, inSameDayAs: date) }
-    }
-    
-    // 分析エラーをセット
-    func setAnalyzingError(id: UUID) {
-        if let index = allLogs.firstIndex(where: { $0.id == id }) {
-            allLogs[index].isAnalyzingError = true
-            allLogs[index].isAnalyzing = false
-            saveLogs()
-            NotificationCenter.default.post(name: .mealLogUpdated, object: nil)
-        }
-    }
-    
+    // MARK: - 永続化
     private func saveLogs() {
-        if let encoded = try? JSONEncoder().encode(allLogs) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        if let data = try? JSONEncoder().encode(allLogs) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
         }
     }
     
     private func loadLogs() {
-        // 新バージョンのデータを試す
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([MealLogEntry].self, from: data) {
-            allLogs = decoded
-            return
+           let logs = try? JSONDecoder().decode([MealLogEntry].self, from: data) {
+            allLogs = logs
         }
-        
-        // 旧バージョンからのマイグレーション
-        if let data = UserDefaults.standard.data(forKey: oldUserDefaultsKey),
-           let decoded = try? JSONDecoder().decode([MealLogEntry].self, from: data) {
-            allLogs = decoded
-            // 新バージョンで保存し直す
-            saveLogs()
-            // 旧データを削除
-            UserDefaults.standard.removeObject(forKey: oldUserDefaultsKey)
-        }
+    }
+    
+    // MARK: - 今日の合計
+    func todayTotals() -> (calories: Int, protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
+        let todayLogs = logs(for: Date()).filter { !$0.isAnalyzing }
+        return (
+            calories: todayLogs.reduce(0) { $0 + $1.calories },
+            protein: todayLogs.reduce(0) { $0 + $1.protein },
+            fat: todayLogs.reduce(0) { $0 + $1.fat },
+            carbs: todayLogs.reduce(0) { $0 + $1.carbs },
+            sugar: todayLogs.reduce(0) { $0 + $1.sugar },
+            fiber: todayLogs.reduce(0) { $0 + $1.fiber },
+            sodium: todayLogs.reduce(0) { $0 + $1.sodium }
+        )
+    }
+    
+    // MARK: - 特定日の合計
+    func totals(for date: Date) -> (calories: Int, protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
+        let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
+        return (
+            calories: dateLogs.reduce(0) { $0 + $1.calories },
+            protein: dateLogs.reduce(0) { $0 + $1.protein },
+            fat: dateLogs.reduce(0) { $0 + $1.fat },
+            carbs: dateLogs.reduce(0) { $0 + $1.carbs },
+            sugar: dateLogs.reduce(0) { $0 + $1.sugar },
+            fiber: dateLogs.reduce(0) { $0 + $1.fiber },
+            sodium: dateLogs.reduce(0) { $0 + $1.sodium }
+        )
+    }
+    
+    // MARK: - 特定日のカロリー合計
+    func totalCalories(for date: Date) -> Int {
+        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.calories }
+    }
+    
+    // MARK: - 特定日の栄養素合計（基本）
+    func totalNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int) {
+        let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
+        return (
+            protein: dateLogs.reduce(0) { $0 + $1.protein },
+            fat: dateLogs.reduce(0) { $0 + $1.fat },
+            carbs: dateLogs.reduce(0) { $0 + $1.carbs }
+        )
+    }
+    
+    // MARK: - 特定日の詳細栄養素合計
+    func detailedNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
+        let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
+        return (
+            protein: dateLogs.reduce(0) { $0 + $1.protein },
+            fat: dateLogs.reduce(0) { $0 + $1.fat },
+            carbs: dateLogs.reduce(0) { $0 + $1.carbs },
+            sugar: dateLogs.reduce(0) { $0 + $1.sugar },
+            fiber: dateLogs.reduce(0) { $0 + $1.fiber },
+            sodium: dateLogs.reduce(0) { $0 + $1.sodium }
+        )
+    }
+    
+    // MARK: - 特定日にログがあるか
+    func hasLogs(for date: Date) -> Bool {
+        !logs(for: date).isEmpty
     }
 }
 
-// MARK: - Notification Names（全アプリ共通）
+// MARK: - Notification Names
 extension Notification.Name {
-    // 食事ログ
     static let mealLogAdded = Notification.Name("mealLogAdded")
     static let mealLogUpdated = Notification.Name("mealLogUpdated")
-    static let mealAddedToSaved = Notification.Name("mealAddedToSaved")
-    
-    // 運動ログ
-    static let exerciseLogAdded = Notification.Name("exerciseLogAdded")
-    static let exerciseLogUpdated = Notification.Name("exerciseLogUpdated")
-    static let exerciseAddedToSaved = Notification.Name("exerciseAddedToSaved")
-    
-    // 体重ログ
-    static let weightLogAdded = Notification.Name("weightLogAdded")
-    
-    // ユーザープロフィール
-    static let userProfileUpdated = Notification.Name("userProfileUpdated")
-    static let nutritionGoalsUpdated = Notification.Name("nutritionGoalsUpdated")
-    
-    // UI制御
+    static let mealLogDeleted = Notification.Name("mealLogDeleted")
     static let showHomeToast = Notification.Name("showHomeToast")
     static let dismissAllMealScreens = Notification.Name("dismissAllMealScreens")
     static let dismissAllExerciseScreens = Notification.Name("dismissAllExerciseScreens")
     static let dismissAllWeightScreens = Notification.Name("dismissAllWeightScreens")
     static let returnToManualEntry = Notification.Name("returnToManualEntry")
+    static let weightLogAdded = Notification.Name("weightLogAdded")  // ✅ 追加
 }

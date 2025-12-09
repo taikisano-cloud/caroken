@@ -1,34 +1,32 @@
 import SwiftUI
 import Combine
 
-// MARK: - 保存済み食事のモデル（画像対応）
-struct SavedMeal: Identifiable, Codable {
-    let id: UUID
-    let name: String
-    let calories: Int
-    let protein: Double
-    let fat: Double
-    let carbs: Double
-    let sugar: Double      // 糖分（g）← 追加
-    let fiber: Double      // 食物繊維（g）← 追加
-    let sodium: Double     // ナトリウム（mg）← 追加
-    let emoji: String
-    let savedAt: Date
-    let hasImage: Bool
+// MARK: - 保存した食事データ
+struct SavedMeal: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var calories: Int
+    var protein: Double
+    var fat: Double
+    var carbs: Double
+    var sugar: Double
+    var fiber: Double
+    var sodium: Double
+    var emoji: String
+    var imageData: Data?  // ✅ Data型で保存（Codable対応）
     
     init(
         id: UUID = UUID(),
-        name: String,
-        calories: Int,
-        protein: Double,
-        fat: Double,
-        carbs: Double,
+        name: String = "",
+        calories: Int = 0,
+        protein: Double = 0,
+        fat: Double = 0,
+        carbs: Double = 0,
         sugar: Double = 0,
         fiber: Double = 0,
         sodium: Double = 0,
         emoji: String = "🍽️",
-        savedAt: Date = Date(),
-        image: UIImage? = nil
+        imageData: Data? = nil
     ) {
         self.id = id
         self.name = name
@@ -40,169 +38,65 @@ struct SavedMeal: Identifiable, Codable {
         self.fiber = fiber
         self.sodium = sodium
         self.emoji = emoji
-        self.savedAt = savedAt
-        self.hasImage = image != nil
-        
-        // 画像を保存
-        if let image = image {
-            SavedMealImageStorage.shared.saveImage(image, for: id)
-        }
+        self.imageData = imageData
     }
     
-    // Codable: 後方互換性のためのデコード
-    enum CodingKeys: String, CodingKey {
-        case id, name, calories, protein, fat, carbs, sugar, fiber, sodium
-        case emoji, savedAt, hasImage
-    }
-    
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        calories = try container.decode(Int.self, forKey: .calories)
-        protein = try container.decode(Double.self, forKey: .protein)
-        fat = try container.decode(Double.self, forKey: .fat)
-        carbs = try container.decode(Double.self, forKey: .carbs)
-        // 新フィールド: なければ0（後方互換性）
-        sugar = try container.decodeIfPresent(Double.self, forKey: .sugar) ?? 0
-        fiber = try container.decodeIfPresent(Double.self, forKey: .fiber) ?? 0
-        sodium = try container.decodeIfPresent(Double.self, forKey: .sodium) ?? 0
-        emoji = try container.decode(String.self, forKey: .emoji)
-        savedAt = try container.decode(Date.self, forKey: .savedAt)
-        hasImage = try container.decode(Bool.self, forKey: .hasImage)
-    }
-    
-    // 画像を取得
+    // ✅ UIImage取得用のcomputed property
     var image: UIImage? {
-        guard hasImage else { return nil }
-        return SavedMealImageStorage.shared.loadImage(for: id)
-    }
-}
-
-// MARK: - 保存済み食事の画像ストレージ
-class SavedMealImageStorage {
-    static let shared = SavedMealImageStorage()
-    
-    private let fileManager = FileManager.default
-    private var imageDirectory: URL {
-        let paths = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
-        let directory = paths[0].appendingPathComponent("SavedMealImages", isDirectory: true)
-        
-        if !fileManager.fileExists(atPath: directory.path) {
-            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        
-        return directory
-    }
-    
-    private init() {
-        _ = imageDirectory
-    }
-    
-    func saveImage(_ image: UIImage, for id: UUID) {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        let resizedImage = resizeImage(image, maxSize: 400)
-        
-        if let data = resizedImage.jpegData(compressionQuality: 0.6) {
-            try? data.write(to: url)
-        }
-    }
-    
-    func loadImage(for id: UUID) -> UIImage? {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let data = imageData else { return nil }
         return UIImage(data: data)
     }
-    
-    func deleteImage(for id: UUID) {
-        let url = imageDirectory.appendingPathComponent("\(id.uuidString).jpg")
-        try? fileManager.removeItem(at: url)
-    }
-    
-    private func resizeImage(_ image: UIImage, maxSize: CGFloat) -> UIImage {
-        let size = image.size
-        let ratio = min(maxSize / size.width, maxSize / size.height)
-        
-        if ratio >= 1 { return image }
-        
-        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        
-        return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
-        }
-    }
 }
 
-// MARK: - 保存済み食事マネージャー
-class SavedMealsManager: ObservableObject {
+// MARK: - 保存した食事マネージャー
+final class SavedMealsManager: ObservableObject {
     static let shared = SavedMealsManager()
     
     @Published var savedMeals: [SavedMeal] = []
     
-    // バージョンアップ（sugar/fiber/sodium追加）
-    private let userDefaultsKey = "savedMeals_v4"
-    private let oldUserDefaultsKey = "savedMeals_v3"
+    private let userDefaultsKey = "savedMeals_v2"
     
     private init() {
         loadMeals()
     }
     
     func addMeal(_ meal: SavedMeal) {
-        objectWillChange.send()
-        savedMeals.insert(meal, at: 0)
+        savedMeals.append(meal)
         saveMeals()
         NotificationCenter.default.post(name: .mealAddedToSaved, object: nil)
-        print("📚 保存済みに追加: \(meal.name), 画像あり: \(meal.hasImage), 現在の件数: \(savedMeals.count)")
     }
     
     func removeMeal(_ meal: SavedMeal) {
-        objectWillChange.send()
-        // 画像も削除
-        SavedMealImageStorage.shared.deleteImage(for: meal.id)
         savedMeals.removeAll { $0.id == meal.id }
         saveMeals()
     }
     
-    func removeMeal(at offsets: IndexSet) {
-        objectWillChange.send()
-        for index in offsets {
-            let meal = savedMeals[index]
-            SavedMealImageStorage.shared.deleteImage(for: meal.id)
+    func updateMeal(_ meal: SavedMeal) {
+        if let index = savedMeals.firstIndex(where: { $0.id == meal.id }) {
+            savedMeals[index] = meal
+            saveMeals()
         }
-        savedMeals.remove(atOffsets: offsets)
-        saveMeals()
     }
     
-    func hasMeal(named name: String) -> Bool {
+    func isSaved(name: String) -> Bool {
         savedMeals.contains { $0.name == name }
     }
     
     private func saveMeals() {
-        if let encoded = try? JSONEncoder().encode(savedMeals) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
-            print("💾 保存済み食事を保存: \(savedMeals.count)件")
+        if let data = try? JSONEncoder().encode(savedMeals) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
         }
     }
     
     private func loadMeals() {
-        // 新バージョンのデータを試す
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([SavedMeal].self, from: data) {
-            savedMeals = decoded
-            print("📂 保存済み食事を読み込み: \(savedMeals.count)件")
-            return
-        }
-        
-        // 旧バージョンからのマイグレーション
-        if let data = UserDefaults.standard.data(forKey: oldUserDefaultsKey),
-           let decoded = try? JSONDecoder().decode([SavedMeal].self, from: data) {
-            savedMeals = decoded
-            // 新バージョンで保存し直す
-            saveMeals()
-            // 旧データを削除
-            UserDefaults.standard.removeObject(forKey: oldUserDefaultsKey)
-            print("📂 保存済み食事をマイグレーション: \(savedMeals.count)件")
+           let meals = try? JSONDecoder().decode([SavedMeal].self, from: data) {
+            savedMeals = meals
         }
     }
+}
+
+// MARK: - 通知名
+extension Notification.Name {
+    static let mealAddedToSaved = Notification.Name("mealAddedToSaved")
 }

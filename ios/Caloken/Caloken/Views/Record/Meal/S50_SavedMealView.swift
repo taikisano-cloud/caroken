@@ -77,7 +77,7 @@ struct S50_SavedMealView: View {
             fat: Int(meal.fat),
             carbs: Int(meal.carbs),
             emoji: meal.emoji,
-            image: meal.image  // 画像も含めて記録
+            image: meal.imageData  // 画像も含めて記録
         )
         MealLogsManager.shared.addLog(mealLog)
         

@@ -1,76 +1,100 @@
 import SwiftUI
 import Combine
 
-// MARK: - 保存済み運動アイテム（S51用）
-struct SavedExerciseItem: Identifiable {
-    let id: UUID
-    let name: String
-    let duration: Int
-    let caloriesBurned: Int
-    let icon: String
-    
-    init(id: UUID = UUID(), name: String, duration: Int, caloriesBurned: Int, icon: String) {
-        self.id = id
-        self.name = name
-        self.duration = duration
-        self.caloriesBurned = caloriesBurned
-        self.icon = icon
-    }
-}
-
-// MARK: - 運動タイプ
+// MARK: - 運動種別
 enum ExerciseType: String, Codable, CaseIterable {
     case running = "running"
-    case strength = "strength"
-    case description = "description"
-    case manualEntry = "manualEntry"
+    case walking = "walking"
+    case cycling = "cycling"
+    case swimming = "swimming"
+    case gym = "gym"
+    case yoga = "yoga"
     case manual = "manual"
+    case strength = "strength"      // ✅ 追加
+    case description = "description" // ✅ 追加
     
     var displayName: String {
         switch self {
-        case .running: return "有酸素運動"
-        case .strength: return "無酸素運動"
+        case .running: return "ランニング"
+        case .walking: return "ウォーキング"
+        case .cycling: return "サイクリング"
+        case .swimming: return "水泳"
+        case .gym: return "ジム"
+        case .yoga: return "ヨガ"
+        case .manual: return "手動入力"
+        case .strength: return "筋トレ"
         case .description: return "その他"
-        case .manualEntry, .manual: return "手動入力"
         }
     }
     
     var icon: String {
         switch self {
         case .running: return "figure.run"
+        case .walking: return "figure.walk"
+        case .cycling: return "bicycle"
+        case .swimming: return "figure.pool.swim"
+        case .gym: return "dumbbell.fill"
+        case .yoga: return "figure.mind.and.body"
+        case .manual: return "flame.fill"
         case .strength: return "dumbbell.fill"
         case .description: return "figure.mixed.cardio"
-        case .manualEntry, .manual: return "pencil"
         }
     }
     
-    var color: Color {
+    var caloriesPerMinute: Double {
         switch self {
-        case .running: return .green
-        case .strength: return .orange
-        case .description: return .blue
-        case .manualEntry, .manual: return .purple
+        case .running: return 10.0
+        case .walking: return 4.0
+        case .cycling: return 7.0
+        case .swimming: return 8.0
+        case .gym: return 6.0
+        case .yoga: return 3.0
+        case .manual: return 5.0
+        case .strength: return 5.0
+        case .description: return 5.0
         }
     }
 }
 
 // MARK: - 運動ログエントリー
-struct ExerciseLogEntry: Identifiable, Codable {
-    let id: UUID
+struct ExerciseLogEntry: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
     var name: String
-    var duration: Int
+    var duration: Int  // 分
     var caloriesBurned: Int
     var exerciseType: ExerciseType
-    var intensity: String
+    var intensity: String       // ✅ 追加
     var date: Date
+    var time: Date
     var isAnalyzing: Bool
-    var analyzingStartedAt: Date?  // 分析開始時刻
-    var isAnalyzingError: Bool  // 分析エラーフラグ
+    var isAnalyzingError: Bool  // ✅ 追加
+    var hasTimedOut: Bool       // ✅ 追加
     
-    // タイムアウト時間（秒）
-    static let analysisTimeout: TimeInterval = 30
+    // ✅ iconはcomputed property
+    var icon: String {
+        exerciseType.icon
+    }
     
-    init(id: UUID = UUID(), name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType, intensity: String = "", date: Date = Date(), isAnalyzing: Bool = false, analyzingStartedAt: Date? = nil, isAnalyzingError: Bool = false) {
+    // ✅ 時刻文字列
+    var timeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: time)
+    }
+    
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        duration: Int = 0,
+        caloriesBurned: Int = 0,
+        exerciseType: ExerciseType = .manual,
+        intensity: String = "",
+        date: Date = Date(),
+        time: Date? = nil,
+        isAnalyzing: Bool = false,
+        isAnalyzingError: Bool = false,
+        hasTimedOut: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.duration = duration
@@ -78,100 +102,85 @@ struct ExerciseLogEntry: Identifiable, Codable {
         self.exerciseType = exerciseType
         self.intensity = intensity
         self.date = date
+        self.time = time ?? date
         self.isAnalyzing = isAnalyzing
-        self.analyzingStartedAt = isAnalyzing ? (analyzingStartedAt ?? Date()) : nil
         self.isAnalyzingError = isAnalyzingError
+        self.hasTimedOut = hasTimedOut
     }
     
-    // タイムアウトしているかどうか
-    var hasTimedOut: Bool {
-        guard isAnalyzing, let startedAt = analyzingStartedAt else { return false }
-        return Date().timeIntervalSince(startedAt) > ExerciseLogEntry.analysisTimeout
+    // ✅ Codable - iconはencode/decodeしない
+    private enum CodingKeys: String, CodingKey {
+        case id, name, duration, caloriesBurned, exerciseType, intensity, date, time
+        case isAnalyzing, isAnalyzingError, hasTimedOut
     }
     
-    var timeString: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter.string(from: date)
-    }
-    
-    var icon: String {
-        exerciseType.icon
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        duration = try container.decode(Int.self, forKey: .duration)
+        caloriesBurned = try container.decode(Int.self, forKey: .caloriesBurned)
+        exerciseType = try container.decode(ExerciseType.self, forKey: .exerciseType)
+        intensity = try container.decodeIfPresent(String.self, forKey: .intensity) ?? ""
+        date = try container.decode(Date.self, forKey: .date)
+        time = try container.decodeIfPresent(Date.self, forKey: .time) ?? date
+        isAnalyzing = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzing) ?? false
+        isAnalyzingError = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzingError) ?? false
+        hasTimedOut = try container.decodeIfPresent(Bool.self, forKey: .hasTimedOut) ?? false
     }
 }
 
 // MARK: - 運動ログマネージャー
-class ExerciseLogsManager: ObservableObject {
+final class ExerciseLogsManager: ObservableObject {
     static let shared = ExerciseLogsManager()
     
-    @Published var allLogs: [ExerciseLogEntry] = []
+    @Published private(set) var allLogs: [ExerciseLogEntry] = []
     
-    private let userDefaultsKey = "exerciseLogEntries_v3"
+    private let userDefaultsKey = "exerciseLogs"
     
     private init() {
         loadLogs()
     }
     
+    // MARK: - 日付でフィルタリング
     func logs(for date: Date) -> [ExerciseLogEntry] {
         let calendar = Calendar.current
-        return allLogs
-            .filter { calendar.isDate($0.date, inSameDayAs: date) }
-            .sorted { $0.date > $1.date }
+        return allLogs.filter { calendar.isDate($0.date, inSameDayAs: date) }
+            .sorted { $0.time > $1.time }
     }
     
-    func totalCalories(for date: Date) -> Int {
-        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.caloriesBurned }
-    }
-    
-    // S24_HomeViewとの互換性のため
-    func totalCaloriesBurned(for date: Date) -> Int {
-        totalCalories(for: date)
-    }
-    
-    func caloriesByType(for date: Date) -> [ExerciseType: Int] {
-        let dayLogs = logs(for: date).filter { !$0.isAnalyzing }
-        var result: [ExerciseType: Int] = [:]
-        for log in dayLogs {
-            result[log.exerciseType, default: 0] += log.caloriesBurned
-        }
-        return result
-    }
-    
+    // MARK: - ログ追加
     func addLog(_ log: ExerciseLogEntry) {
-        allLogs.insert(log, at: 0)
+        allLogs.append(log)
         saveLogs()
-        NotificationCenter.default.post(name: .exerciseLogAdded, object: nil)
     }
     
-    // 分析中のログを追加
-    func addAnalyzingLog(name: String, duration: Int, exerciseType: ExerciseType = .description, intensity: String = "", for date: Date) -> UUID {
-        let id = UUID()
+    // MARK: - 分析中ログ追加
+    func addAnalyzingLog(name: String, duration: Int, for date: Date) -> UUID {
         let log = ExerciseLogEntry(
-            id: id,
             name: name,
             duration: duration,
             caloriesBurned: 0,
-            exerciseType: exerciseType,
-            intensity: intensity,
+            exerciseType: .manual,
             date: date,
+            time: Date(),
             isAnalyzing: true
         )
-        allLogs.insert(log, at: 0)
+        allLogs.append(log)
         saveLogs()
-        NotificationCenter.default.post(name: .exerciseLogAdded, object: nil)
-        return id
+        return log.id
     }
     
-    // 分析完了
+    // MARK: - 分析完了
     func completeAnalyzing(id: UUID, caloriesBurned: Int) {
         if let index = allLogs.firstIndex(where: { $0.id == id }) {
             allLogs[index].caloriesBurned = caloriesBurned
             allLogs[index].isAnalyzing = false
             saveLogs()
-            NotificationCenter.default.post(name: .exerciseLogUpdated, object: nil)
         }
     }
     
+    // MARK: - ログ更新
     func updateLog(_ log: ExerciseLogEntry) {
         if let index = allLogs.firstIndex(where: { $0.id == log.id }) {
             allLogs[index] = log
@@ -179,103 +188,123 @@ class ExerciseLogsManager: ObservableObject {
         }
     }
     
-    func removeLog(_ log: ExerciseLogEntry) {
-        allLogs.removeAll { $0.id == log.id }
-        saveLogs()
-    }
-    
+    // MARK: - ログ削除
     func removeLog(id: UUID) {
         allLogs.removeAll { $0.id == id }
         saveLogs()
     }
     
-    func hasLogs(for date: Date) -> Bool {
-        let calendar = Calendar.current
-        return allLogs.contains { calendar.isDate($0.date, inSameDayAs: date) }
+    // MARK: - 特定日の消費カロリー合計
+    func totalCaloriesBurned(for date: Date) -> Int {
+        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.caloriesBurned }
     }
     
+    // MARK: - 永続化
     private func saveLogs() {
-        if let encoded = try? JSONEncoder().encode(allLogs) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        if let data = try? JSONEncoder().encode(allLogs) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
         }
     }
     
     private func loadLogs() {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([ExerciseLogEntry].self, from: data) {
-            allLogs = decoded
+           let logs = try? JSONDecoder().decode([ExerciseLogEntry].self, from: data) {
+            allLogs = logs
         }
     }
 }
 
-// MARK: - 保存済み運動のモデル
-struct SavedExercise: Identifiable, Codable {
-    let id: UUID
-    let name: String
-    let duration: Int
-    let caloriesBurned: Int
-    let exerciseType: ExerciseType
-    let intensity: String
-    let savedAt: Date
+// MARK: - 保存済み運動アイテム（S51_ExerciseDetailView用）
+struct SavedExerciseItem: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var duration: Int
+    var caloriesBurned: Int
+    var exerciseType: ExerciseType
+    var intensity: String
     
-    init(id: UUID = UUID(), name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType, intensity: String = "", savedAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        duration: Int = 30,
+        caloriesBurned: Int = 150,
+        exerciseType: ExerciseType = .manual,
+        intensity: String = ""
+    ) {
         self.id = id
         self.name = name
         self.duration = duration
         self.caloriesBurned = caloriesBurned
         self.exerciseType = exerciseType
         self.intensity = intensity
-        self.savedAt = savedAt
     }
+}
+
+// MARK: - 保存済み運動（SavedExercisesManager用）
+struct SavedExercise: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var name: String
+    var duration: Int
+    var caloriesBurned: Int
+    var exerciseType: ExerciseType
+    var intensity: String
     
-    var icon: String {
-        exerciseType.icon
-    }
-    
-    var color: Color {
-        exerciseType.color
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        duration: Int = 30,
+        caloriesBurned: Int = 150,
+        exerciseType: ExerciseType = .manual,
+        intensity: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.duration = duration
+        self.caloriesBurned = caloriesBurned
+        self.exerciseType = exerciseType
+        self.intensity = intensity
     }
 }
 
 // MARK: - 保存済み運動マネージャー
-class SavedExercisesManager: ObservableObject {
+final class SavedExercisesManager: ObservableObject {
     static let shared = SavedExercisesManager()
     
     @Published var savedExercises: [SavedExercise] = []
     
-    private let userDefaultsKey = "savedExercises_v1"
+    private let userDefaultsKey = "savedExercises"
     
     private init() {
         loadExercises()
     }
     
     func addExercise(_ exercise: SavedExercise) {
-        objectWillChange.send()
-        savedExercises.insert(exercise, at: 0)
-        saveExercises()
-        NotificationCenter.default.post(name: .exerciseAddedToSaved, object: nil)
-    }
-    
-    func removeExercise(_ exercise: SavedExercise) {
-        objectWillChange.send()
-        savedExercises.removeAll { $0.id == exercise.id }
+        savedExercises.append(exercise)
         saveExercises()
     }
     
-    func hasExercise(named name: String) -> Bool {
-        savedExercises.contains { $0.name == name }
+    func removeExercise(id: UUID) {
+        savedExercises.removeAll { $0.id == id }
+        saveExercises()
+    }
+    
+    func updateExercise(_ exercise: SavedExercise) {
+        if let index = savedExercises.firstIndex(where: { $0.id == exercise.id }) {
+            savedExercises[index] = exercise
+            saveExercises()
+        }
     }
     
     private func saveExercises() {
-        if let encoded = try? JSONEncoder().encode(savedExercises) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        if let data = try? JSONEncoder().encode(savedExercises) {
+            UserDefaults.standard.set(data, forKey: userDefaultsKey)
         }
     }
     
     private func loadExercises() {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([SavedExercise].self, from: data) {
-            savedExercises = decoded
+           let exercises = try? JSONDecoder().decode([SavedExercise].self, from: data) {
+            savedExercises = exercises
         }
     }
 }

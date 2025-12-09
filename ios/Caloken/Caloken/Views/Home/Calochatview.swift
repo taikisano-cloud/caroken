@@ -1,33 +1,8 @@
 import SwiftUI
 import PhotosUI
 import Combine
-
-// MARK: - チャットモード
-enum ChatMode: String, CaseIterable {
-    case fast = "fast"
-    case thinking = "thinking"
-    
-    var displayName: String {
-        switch self {
-        case .fast: return "高速"
-        case .thinking: return "思考"
-        }
-    }
-    
-    var icon: String {
-        switch self {
-        case .fast: return "bolt.fill"
-        case .thinking: return "brain.head.profile"
-        }
-    }
-    
-    var description: String {
-        switch self {
-        case .fast: return "素早く簡潔な回答"
-        case .thinking: return "じっくり詳しい回答"
-        }
-    }
-}
+import Speech
+import AVFoundation
 
 // MARK: - チャットメッセージマネージャー（日毎管理・画像対応）
 final class ChatMessagesManager: ObservableObject {
@@ -66,7 +41,6 @@ final class ChatMessagesManager: ObservableObject {
         saveMessages()
     }
     
-    // 会話履歴をAPI送信用の形式に変換
     func chatHistoryForAPI(for date: Date) -> [[String: Any]] {
         let msgs = messages(for: date)
         return msgs.suffix(10).map { msg in
@@ -116,7 +90,7 @@ final class ChatMessagesManager: ObservableObject {
 
 private let maxCharacterCount = 1000
 
-// MARK: - カロちゃんチャット画面
+// MARK: - カロちゃんチャット画面（Geminiスタイル）
 struct CaloChatView: View {
     let selectedDate: Date
     @Binding var isPresented: Bool
@@ -129,9 +103,14 @@ struct CaloChatView: View {
     @State private var typingTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var hasScrolledToBottom: Bool = false
-    @State private var chatMode: ChatMode = .fast
-    @State private var textEditorHeight: CGFloat = 40
     @FocusState private var isTextFieldFocused: Bool
+    
+    // 音声入力用
+    @StateObject private var speechRecognizer = SpeechRecognizer()
+    @State private var isRecording: Bool = false
+    
+    // ✅ モード切り替え用（fast: 高速モード, thinking: 思考モード）
+    @State private var chatMode: String = "fast"
     
     private let chatManager = ChatMessagesManager.shared
     private let network = NetworkManager.shared
@@ -147,8 +126,8 @@ struct CaloChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // モード切り替え + 日付表示
-            headerView
+            // 日付表示
+            dateHeader
             
             if hasMessages {
                 chatHistoryView
@@ -165,7 +144,7 @@ struct CaloChatView: View {
                     .padding(.vertical, 4)
             }
             
-            // 入力エリア
+            // 入力エリア（Geminiスタイル）
             inputArea
         }
         .background(Color(UIColor.systemGroupedBackground))
@@ -176,6 +155,7 @@ struct CaloChatView: View {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
                     typingTask?.cancel()
+                    speechRecognizer.stopRecording()
                     isPresented = false
                 } label: {
                     Image(systemName: "chevron.left")
@@ -187,52 +167,21 @@ struct CaloChatView: View {
         .enableSwipeBack()
         .onAppear {
             messages = chatManager.messages(for: selectedDate)
+            speechRecognizer.requestAuthorization()
         }
         .onDisappear {
-            typingTask?.cancel()
+            // ✅ チャット処理はバックグラウンドでも継続（キャンセルしない）
+            // typingTask?.cancel()
+            speechRecognizer.stopRecording()
         }
     }
     
-    // MARK: - ヘッダー（モード切り替え + 日付）
-    private var headerView: some View {
-        VStack(spacing: 8) {
-            // モード切り替えセグメント
-            HStack(spacing: 0) {
-                ForEach(ChatMode.allCases, id: \.self) { mode in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            chatMode = mode
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: mode.icon)
-                                .font(.system(size: 12, weight: .medium))
-                            Text(mode.displayName)
-                                .font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundColor(chatMode == mode ? .white : .primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            chatMode == mode ?
-                            (mode == .fast ? Color.orange : Color.purple) :
-                            Color.clear
-                        )
-                        .cornerRadius(20)
-                    }
-                }
-            }
-            .padding(4)
-            .background(Color(UIColor.tertiarySystemFill))
-            .cornerRadius(24)
-            
-            // 日付表示
-            Text(formatDate(selectedDate))
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-        }
-        .padding(.vertical, 8)
-        .background(Color(UIColor.systemGroupedBackground))
+    // MARK: - 日付ヘッダー
+    private var dateHeader: some View {
+        Text(formatDate(selectedDate))
+            .font(.system(size: 13))
+            .foregroundColor(.secondary)
+            .padding(.vertical, 8)
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -276,58 +225,29 @@ struct CaloChatView: View {
                     .multilineTextAlignment(.center)
             }
             
-            // モード説明
-            VStack(spacing: 12) {
-                modeExplanationRow(mode: .fast)
-                modeExplanationRow(mode: .thinking)
-            }
-            .padding(.horizontal, 40)
-            .padding(.top, 16)
-            
             Spacer()
             Spacer()
         }
         .padding(.horizontal, 20)
     }
     
-    private func modeExplanationRow(mode: ChatMode) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: mode.icon)
-                .font(.system(size: 16))
-                .foregroundColor(mode == .fast ? .orange : .purple)
-                .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mode.displayName)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.primary)
-                Text(mode.description)
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-        }
-        .padding(12)
-        .background(Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(12)
-    }
-    
     private var chatHistoryView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 12) {
                     ForEach(messages) { message in
                         ChatBubble(message: message)
                             .id(message.id)
                     }
                     
                     if isTyping {
-                        TypingIndicator(mode: chatMode)
+                        TypingIndicator()
                             .id("typing")
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
             }
             .onAppear {
                 if !hasScrolledToBottom {
@@ -349,19 +269,17 @@ struct CaloChatView: View {
         }
     }
     
-    // MARK: - 入力エリア（TextEditor対応）
+    // MARK: - 入力エリア（Geminiスタイル）
     private var inputArea: some View {
         VStack(spacing: 0) {
-            Divider()
-            
             // 選択画像プレビュー
             if let pendingImage = pendingImage {
                 HStack {
                     Image(uiImage: pendingImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 80, height: 80)
-                        .cornerRadius(12)
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
                         .clipped()
                     
                     Spacer()
@@ -372,257 +290,360 @@ struct CaloChatView: View {
                         }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
+                            .font(.system(size: 20))
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-            }
-            
-            // 文字数カウンター
-            if !messageText.isEmpty {
-                HStack {
-                    Spacer()
-                    Text("\(messageText.count)/\(maxCharacterCount)")
-                        .font(.system(size: 12))
-                        .foregroundColor(messageText.count > maxCharacterCount ? .red : .secondary)
-                }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 20)
                 .padding(.top, 8)
             }
             
-            // 入力欄
-            HStack(alignment: .bottom, spacing: 12) {
-                // 画像添付ボタン
-                PhotosPicker(selection: $selectedItem, matching: .images) {
-                    Image(systemName: pendingImage == nil ? "plus" : "photo.fill")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(pendingImage == nil ? .secondary : .orange)
-                        .frame(width: 36, height: 36)
-                }
-                .disabled(isTyping || pendingImage != nil)
-                .onChange(of: selectedItem) { _, newItem in
-                    handleImageSelection(newItem)
-                }
-                
-                // テキスト入力フィールド（TextEditor - 改行対応）
+            // Geminiスタイル入力ボックス
+            VStack(spacing: 0) {
+                // テキスト入力エリア（上部）
                 ZStack(alignment: .topLeading) {
-                    // プレースホルダー
-                    if messageText.isEmpty {
-                        Text("カロちゃんに相談")
-                            .font(.system(size: 17))
+                    if messageText.isEmpty && !isRecording {
+                        Text("カロちゃんに相談...")
+                            .font(.system(size: 16))
                             .foregroundColor(Color(UIColor.placeholderText))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 12)
                     }
                     
-                    // TextEditor（改行可能）
-                    TextEditor(text: $messageText)
-                        .font(.system(size: 17))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .frame(minHeight: 40, maxHeight: 120)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .scrollContentBackground(.hidden)
-                        .background(Color.clear)
-                        .focused($isTextFieldFocused)
-                        .disabled(isTyping)
-                        .onChange(of: messageText) { _, newValue in
-                            // 文字数制限
-                            if newValue.count > maxCharacterCount {
-                                messageText = String(newValue.prefix(maxCharacterCount))
-                            }
+                    if isRecording {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 8, height: 8)
+                            Text(speechRecognizer.transcript.isEmpty ? "聞いています..." : speechRecognizer.transcript)
+                                .font(.system(size: 16))
+                                .foregroundColor(.primary)
+                            Spacer()
                         }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 12)
+                    } else {
+                        TextEditor(text: $messageText)
+                            .font(.system(size: 16))
+                            .frame(minHeight: 36, maxHeight: 100)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .scrollContentBackground(.hidden)
+                            .background(Color.clear)
+                            .focused($isTextFieldFocused)
+                            .disabled(isTyping)
+                            .onChange(of: messageText) { _, newValue in
+                                if newValue.count > maxCharacterCount {
+                                    messageText = String(newValue.prefix(maxCharacterCount))
+                                }
+                            }
+                    }
                 }
-                .background(Color(UIColor.tertiarySystemFill))
-                .cornerRadius(20)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
                 
-                // 送信ボタン
-                Button {
-                    sendMessage()
-                } label: {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                        .frame(width: 40, height: 40)
-                        .background(canSend ? Color.orange : Color.gray.opacity(0.5))
-                        .clipShape(Circle())
+                // ボタンエリア（下部）
+                HStack(spacing: 12) {
+                    // 画像添付ボタン
+                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 20))
+                            .foregroundColor(pendingImage == nil ? .secondary : .orange)
+                    }
+                    .disabled(isTyping || pendingImage != nil)
+                    .onChange(of: selectedItem) { _, newItem in
+                        handleImageSelection(newItem)
+                    }
+                    
+                    Spacer()
+                    
+                    // ✅ モード切り替えボタン
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            chatMode = chatMode == "fast" ? "thinking" : "fast"
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: chatMode == "fast" ? "hare.fill" : "brain.head.profile")
+                                .font(.system(size: 12))
+                            Text(chatMode == "fast" ? "高速" : "思考")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(chatMode == "fast" ? .secondary : .orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(UIColor.systemGray5))
+                        .cornerRadius(14)
+                    }
+                    .disabled(isTyping)
+                    
+                    // 音声入力ボタン
+                    Button {
+                        toggleRecording()
+                    } label: {
+                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(isRecording ? .white : .secondary)
+                            .frame(width: 36, height: 36)
+                            .background(isRecording ? Color.red : Color.clear)
+                            .clipShape(Circle())
+                    }
+                    .disabled(isTyping)
+                    
+                    // 送信ボタン
+                    Button {
+                        sendMessage()
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                            .frame(width: 36, height: 36)
+                            .background(canSend ? Color.orange : Color(UIColor.systemGray4))
+                            .clipShape(Circle())
+                    }
+                    .disabled(!canSend)
                 }
-                .disabled(!canSend)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(24)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
         .background(Color(UIColor.systemGroupedBackground))
     }
     
-    // 即時スクロール
-    private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
-        if isTyping {
-            proxy.scrollTo("typing", anchor: .bottom)
-        } else if let lastMessage = messages.last {
-            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-        }
-    }
-    
-    // アニメーション付きスクロール
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                if isTyping {
-                    proxy.scrollTo("typing", anchor: .bottom)
-                } else if let lastMessage = messages.last {
-                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                }
+    // MARK: - 音声入力トグル
+    private func toggleRecording() {
+        if isRecording {
+            // 録音停止
+            speechRecognizer.stopRecording()
+            if !speechRecognizer.transcript.isEmpty {
+                messageText = speechRecognizer.transcript
             }
+            isRecording = false
+        } else {
+            // 録音開始
+            speechRecognizer.transcript = ""
+            speechRecognizer.startRecording()
+            isRecording = true
         }
     }
     
-    private func handleImageSelection(_ newItem: PhotosPickerItem?) {
-        guard let newItem = newItem else { return }
+    // MARK: - 画像選択処理
+    private func handleImageSelection(_ item: PhotosPickerItem?) {
+        guard let item = item else { return }
         
         Task {
-            if let data = try? await newItem.loadTransferable(type: Data.self),
+            if let data = try? await item.loadTransferable(type: Data.self),
                let uiImage = UIImage(data: data) {
                 await MainActor.run {
-                    withAnimation {
-                        pendingImage = uiImage
-                    }
-                    selectedItem = nil
+                    pendingImage = uiImage
                 }
             }
         }
     }
     
+    // MARK: - メッセージ送信
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty || pendingImage != nil else { return }
         
-        let textToSend = trimmedText.isEmpty ? nil : trimmedText
-        let imageToSend = pendingImage
-        
-        let userMessage = ChatMessage(isUser: true, text: textToSend, image: imageToSend)
+        let userMessage = ChatMessage(
+            isUser: true,
+            text: trimmedText.isEmpty ? nil : trimmedText,
+            image: pendingImage
+        )
         messages.append(userMessage)
         chatManager.addMessage(userMessage, for: selectedDate)
         
-        let userText = trimmedText.isEmpty ? "画像を送信しました" : trimmedText
+        let imageBase64 = pendingImage?.jpegData(compressionQuality: 0.7)?.base64EncodedString()
+        
         messageText = ""
         pendingImage = nil
-        errorMessage = nil
-        
-        // キーボードを閉じる
+        selectedItem = nil
         isTextFieldFocused = false
-        
-        // APIを呼び出し（ユーザー情報付き）
-        sendToAPIWithUserContext(message: userText, image: imageToSend)
-    }
-    
-    // MARK: - ユーザーコンテキストを取得
-    private func getUserContext() -> [String: Any] {
-        let pm = profileManager
-        let wm = WeightLogsManager.shared
-        let mm = MealLogsManager.shared
-        let em = ExerciseLogsManager.shared
-        
-        // 今日の栄養素
-        let nutrients = mm.totalNutrients(for: Date())
-        let todayCalories = mm.totalCalories(for: Date())
-        let todayExercise = em.totalCaloriesBurned(for: Date())
-        
-        return [
-            // ユーザー基本情報
-            "gender": pm.gender == "Male" ? "男性" : "女性",
-            "age": pm.age,
-            "height": pm.height,
-            "current_weight": wm.currentWeight,
-            "target_weight": wm.targetWeight,
-            "bmi": String(format: "%.1f", pm.bmi),
-            "bmi_status": pm.bmiStatus,
-            
-            // 目標
-            "goal": pm.goal,
-            "exercise_frequency": pm.exerciseFrequency,
-            
-            // 栄養目標
-            "calorie_goal": pm.calorieGoal,
-            "protein_goal": pm.proteinGoal,
-            "fat_goal": pm.fatGoal,
-            "carb_goal": pm.carbGoal,
-            
-            // 今日の実績
-            "today_calories": todayCalories,
-            "today_protein": nutrients.protein,
-            "today_fat": nutrients.fat,
-            "today_carbs": nutrients.carbs,
-            "today_exercise": todayExercise,
-            
-            // 残りカロリー
-            "remaining_calories": pm.calorieGoal - todayCalories + todayExercise
-        ]
-    }
-    
-    // MARK: - API呼び出し（ユーザーコンテキスト付き + モード対応）
-    private func sendToAPIWithUserContext(message: String, image: UIImage?) {
         isTyping = true
+        errorMessage = nil
         
         typingTask = Task {
             do {
-                // 画像をBase64に変換
-                var imageBase64: String? = nil
-                if let image = image,
-                   let imageData = image.jpegData(compressionQuality: 0.7) {
-                    imageBase64 = imageData.base64EncodedString()
-                }
-                
-                // ユーザーコンテキストを取得
-                let userContext = getUserContext()
-                
-                // 会話履歴を取得
                 let chatHistory = chatManager.chatHistoryForAPI(for: selectedDate)
+                let userContext = buildUserContext()
                 
-                // API呼び出し（モードを渡す）
                 let response = try await network.sendChatWithUserContext(
-                    message: message,
+                    message: trimmedText,
                     imageBase64: imageBase64,
                     chatHistory: chatHistory,
                     userContext: userContext,
-                    mode: chatMode.rawValue  // "fast" または "thinking"
+                    mode: chatMode  // ✅ モード切り替えを反映
                 )
                 
                 if !Task.isCancelled {
                     await MainActor.run {
-                        let responseMessage = ChatMessage(isUser: false, text: response, image: nil)
-                        messages.append(responseMessage)
-                        chatManager.addMessage(responseMessage, for: selectedDate)
+                        let aiMessage = ChatMessage(isUser: false, text: response, image: nil)
+                        messages.append(aiMessage)
+                        chatManager.addMessage(aiMessage, for: selectedDate)
                         isTyping = false
                     }
                 }
             } catch {
                 if !Task.isCancelled {
                     await MainActor.run {
-                        let fallbackMessage = generateFallbackResponse(for: message)
-                        let errorMsg = ChatMessage(isUser: false, text: fallbackMessage, image: nil)
-                        messages.append(errorMsg)
-                        chatManager.addMessage(errorMsg, for: selectedDate)
+                        let fallback = generateFallbackResponse(for: trimmedText)
+                        let aiMessage = ChatMessage(isUser: false, text: fallback, image: nil)
+                        messages.append(aiMessage)
+                        chatManager.addMessage(aiMessage, for: selectedDate)
                         isTyping = false
-                        
-                        print("❌ Chat API Error: \(error.localizedDescription)")
                     }
                 }
             }
         }
     }
     
+    // MARK: - ユーザーコンテキスト構築
+    private func buildUserContext() -> [String: Any] {
+        let logsManager = MealLogsManager.shared
+        let exerciseLogsManager = ExerciseLogsManager.shared
+        let nutrients = logsManager.totalNutrients(for: selectedDate)
+        let todayCalories = logsManager.totalCalories(for: selectedDate)
+        let todayExercise = exerciseLogsManager.totalCaloriesBurned(for: selectedDate)
+        let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }.joined(separator: "、")
+        
+        return [
+            "gender": profileManager.gender,
+            "age": profileManager.age,
+            "height": profileManager.height,
+            "current_weight": profileManager.currentWeight,
+            "target_weight": profileManager.targetWeight,
+            "goal": profileManager.goal,
+            "exercise_frequency": profileManager.exerciseFrequency,
+            "today_calories": todayCalories,
+            "calorie_goal": profileManager.calorieGoal,
+            "today_protein": nutrients.protein,
+            "protein_goal": profileManager.proteinGoal,
+            "today_fat": nutrients.fat,
+            "fat_goal": profileManager.fatGoal,
+            "today_carbs": nutrients.carbs,
+            "carb_goal": profileManager.carbGoal,
+            "today_exercise": todayExercise,
+            "today_meals": todayMeals,
+            "remaining_calories": profileManager.calorieGoal - todayCalories + todayExercise
+        ]
+    }
+    
     // MARK: - フォールバック応答
     private func generateFallbackResponse(for message: String) -> String {
-        return "ごめんにゃ😿 ちょっと調子が悪いみたい...もう一度試してほしいにゃ！"
+        let responses = [
+            "なるほどにゃ〜！もっと詳しく教えてほしいにゃ🐱",
+            "いい質問だにゃ！一緒に考えようにゃ😊",
+            "ふむふむ、それは大事なことだにゃ🐱💪",
+            "カロちゃんも応援してるにゃ！頑張ってにゃ✨"
+        ]
+        return responses.randomElement() ?? "にゃ〜🐱"
+    }
+    
+    // MARK: - スクロール
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.3)) {
+            if isTyping {
+                proxy.scrollTo("typing", anchor: .bottom)
+            } else if let lastMessage = messages.last {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            }
+        }
+    }
+    
+    private func scrollToBottomImmediate(proxy: ScrollViewProxy) {
+        if let lastMessage = messages.last {
+            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+        }
     }
 }
 
-// MARK: - タイピングインジケーター（モード対応）
+// MARK: - 音声認識マネージャー
+class SpeechRecognizer: ObservableObject {
+    @Published var transcript: String = ""
+    @Published var isAuthorized: Bool = false
+    
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private let audioEngine = AVAudioEngine()
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "ja-JP"))
+    
+    func requestAuthorization() {
+        SFSpeechRecognizer.requestAuthorization { status in
+            DispatchQueue.main.async {
+                self.isAuthorized = (status == .authorized)
+            }
+        }
+    }
+    
+    func startRecording() {
+        guard isAuthorized else { return }
+        
+        // 既存のタスクをキャンセル
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        
+        // オーディオセッション設定
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("Audio session setup failed: \(error)")
+            return
+        }
+        
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        
+        guard let recognitionRequest = recognitionRequest else { return }
+        recognitionRequest.shouldReportPartialResults = true
+        
+        let inputNode = audioEngine.inputNode
+        
+        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            if let result = result {
+                DispatchQueue.main.async {
+                    self?.transcript = result.bestTranscription.formattedString
+                }
+            }
+            
+            if error != nil || result?.isFinal == true {
+                self?.audioEngine.stop()
+                inputNode.removeTap(onBus: 0)
+            }
+        }
+        
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+            recognitionRequest.append(buffer)
+        }
+        
+        audioEngine.prepare()
+        
+        do {
+            try audioEngine.start()
+        } catch {
+            print("Audio engine failed to start: \(error)")
+        }
+    }
+    
+    func stopRecording() {
+        audioEngine.stop()
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        
+        let inputNode = audioEngine.inputNode
+        inputNode.removeTap(onBus: 0)
+    }
+}
+
+// MARK: - タイピングインジケーター（シンプル - ... のみ）
 struct TypingIndicator: View {
-    let mode: ChatMode
     @State private var dotCount = 0
     
     let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
@@ -645,29 +666,19 @@ struct TypingIndicator: View {
                 ChatBubbleArrowLeft()
                     .fill(Color(UIColor.secondarySystemGroupedBackground))
                     .frame(width: 10, height: 14)
-                    .offset(y: 14)
+                    .offset(y: 12)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    // モード表示
-                    HStack(spacing: 4) {
-                        Image(systemName: mode.icon)
-                            .font(.system(size: 10))
-                        Text(mode == .thinking ? "考え中..." : "入力中...")
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(mode == .fast ? .orange : .purple)
-                    
-                    HStack(spacing: 6) {
-                        ForEach(0..<3, id: \.self) { index in
-                            Circle()
-                                .fill(mode == .fast ? Color.orange : Color.purple)
-                                .frame(width: 8, height: 8)
-                                .scaleEffect(dotCount == index ? 1.3 : 1.0)
-                                .animation(.easeInOut(duration: 0.3), value: dotCount)
-                        }
+                // シンプルな ... 表示のみ
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Circle()
+                            .fill(Color.secondary)
+                            .frame(width: 8, height: 8)
+                            .scaleEffect(dotCount == index ? 1.3 : 1.0)
+                            .animation(.easeInOut(duration: 0.3), value: dotCount)
                     }
                 }
-                .padding(12)
+                .padding(14)
                 .background(Color(UIColor.secondarySystemGroupedBackground))
                 .cornerRadius(16)
             }
@@ -739,7 +750,7 @@ struct ChatBubble: View {
                     ChatBubbleArrowLeft()
                         .fill(Color(UIColor.secondarySystemGroupedBackground))
                         .frame(width: 10, height: 14)
-                        .offset(y: 14)
+                        .offset(y: 12)
                     
                     if let text = message.text {
                         Text(text)
