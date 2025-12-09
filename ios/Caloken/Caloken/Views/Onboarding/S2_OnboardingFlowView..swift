@@ -285,10 +285,6 @@ struct S2_OnboardingFlowView: View {
         .navigationDestination(isPresented: $navigateToLogin) {
             S23_LoginView()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .popToRootView)) { _ in
-            // S1に戻るためにdismiss
-            dismiss()
-        }
     }
     
     private var continueButtonTitle: String {

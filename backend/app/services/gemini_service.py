@@ -14,10 +14,12 @@ genai.configure(api_key=settings.gemini_api_key)
 # ============================================
 # モデル設定
 # ============================================
-# Flash Lite: 高速モード用
-model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')
+# Flash: チャット用（高速モード）- flash-liteは会話に不向きなためflashを使用
+model_flash = genai.GenerativeModel('gemini-2.0-flash')
 # Pro: 高精度（画像分析、食事分析、思考モード用）
 model_pro = genai.GenerativeModel('gemini-2.5-pro')
+# Flash Lite: 軽量タスク用（アドバイス生成、メモリ抽出）
+model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')
 
 
 class GeminiService:
@@ -222,7 +224,7 @@ class GeminiService:
         カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
         
         mode: 
-        - "fast" = 高速モード（Flash Lite）
+        - "fast" = 高速モード（Flash）
         - "thinking" = 思考モード（Pro）
         
         Returns: {"response": str, "memory_to_save": Optional[dict]}
@@ -327,41 +329,30 @@ class GeminiService:
                 role = "ユーザー" if msg.get('is_user') else "カロちゃん"
                 history_text += f"{role}: {msg.get('message', '')}\n"
         
-        system_prompt = f"""
-あなたは「カロちゃん」という名前の可愛い猫のAIアシスタントです。
+        system_prompt = f"""あなたは「カロちゃん」という名前の可愛い猫のAIアシスタントです。
 カロ研（カロリー研究）アプリのマスコットキャラクターとして、ユーザーの健康管理をサポートします。
 
-【性格】
-- 明るくて元気、ユーザーを励ます
-- 語尾に「にゃ」「だにゃ」をつける（毎文ではなく自然に）
+【キャラクター設定】
+- 明るくて元気、ユーザーを励ます猫キャラ
+- 語尾に「にゃ」「だにゃ」を自然につける（毎文ではなく適度に）
 - 絵文字を適度に使う（🐱😊🔥💪🍽️など）
 - 専門的なアドバイスも分かりやすく伝える
-- ユーザーの食事や健康について具体的なアドバイスをする
-- 時間帯に合わせた自然な挨拶や話題を心がける
 
-【重要な行動指針】
-1. ユーザーの質問や話題にしっかり答える（話をそらさない）
-2. ユーザー情報を活用してパーソナライズされた回答をする
-3. 会話の流れを理解して、文脈に沿った返答をする
-4. 毎回カロリーの話をしない（ユーザーが聞いてきたときだけ）
-5. 料理の提案、レシピ、励まし、雑談など多様な会話ができる
-6. 過去の会話や記憶を参照して一貫性を保つ
-7. ユーザーの目標（減量/維持/増量）を常に意識する
-
-【回答の質を高めるポイント】
-- 具体的な数値やアドバイスを含める
-- ユーザーの状況に合わせた提案をする
-- 質問には直接的に答える
-- 必要なら理由も簡潔に説明する
+【最重要ルール】
+1. ユーザーのメッセージに直接答える
+2. 質問されたら具体的に回答する
+3. 「明日のメニュー」と聞かれたら、具体的な料理を提案する
+4. 挨拶には挨拶で返す
+5. 雑談には雑談で返す
 
 {context}
 {history_text}
 
-【現在のユーザーのメッセージ】
+【ユーザーのメッセージ】
 {message}
 
-カロちゃんとして、上記の指針に従って自然に返答してください:
-"""
+上記のメッセージに対して、カロちゃんとして自然に返答してください。
+ユーザーが何を求めているかを理解し、それに直接答えてください。"""
         
         try:
             # ✅ モードに応じてモデルを選択
@@ -376,8 +367,8 @@ class GeminiService:
                 # 思考モード: Proモデル
                 response = model_pro.generate_content(system_prompt)
             else:
-                # 高速モード: Flash Liteモデル
-                response = model_flash_lite.generate_content(system_prompt)
+                # 高速モード: Flashモデル（flash-liteは会話に不向き）
+                response = model_flash.generate_content(system_prompt)
             
             response_text = response.text.strip()
             
@@ -392,7 +383,7 @@ class GeminiService:
         except Exception as e:
             print(f"Gemini chat API Error: {e}")
             return {
-                "response": f"ごめんにゃ、{time_period}なのにちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！",
+                "response": f"ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！",
                 "memory_to_save": None
             }
     
@@ -427,8 +418,7 @@ class GeminiService:
         else:
             time_context = "夜の時間帯"
         
-        prompt = f"""
-あなたは「カロちゃん」という猫のAIアシスタントです。
+        prompt = f"""あなたは「カロちゃん」という猫のAIアシスタントです。
 
 【ユーザーの今日の状況】
 - 摂取カロリー: {today_calories}kcal / 目標: {goal_calories}kcal
@@ -445,8 +435,7 @@ class GeminiService:
 上記の状況に合わせた短いアドバイスを1文で返してください。
 - 語尾に「にゃ」をつける
 - 絵文字を1-2個使う
-- 具体的で役立つアドバイスにする
-"""
+- 具体的で役立つアドバイスにする"""
         
         try:
             response = model_flash_lite.generate_content(prompt)
@@ -461,8 +450,7 @@ class GeminiService:
         会話から重要な情報を抽出して記憶として保存するか判断
         ✅ Flash Liteモデル使用（高速）
         """
-        prompt = f"""
-以下の会話から、覚えておくべき重要な情報があるか判断してください。
+        prompt = f"""以下の会話から、覚えておくべき重要な情報があるか判断してください。
 
 【ユーザーのメッセージ】
 {message}
@@ -487,8 +475,7 @@ class GeminiService:
     "content": "抽出した情報（簡潔に）",
     "importance": 1-5の数字,
     "expires_in_days": null（永続）または数字（何日後に期限切れ）
-}}
-"""
+}}"""
         
         try:
             result = model_flash_lite.generate_content(prompt)

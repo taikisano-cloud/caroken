@@ -200,19 +200,20 @@ struct S27_3_NutritionGoalView: View {
         .navigationBarTitleDisplayMode(.large)
         // カロリーピッカー
         .sheet(isPresented: $showCaloriePicker) {
-            CaloriePickerSheet(calories: Binding(
+            ImprovedCaloriePickerSheet(calories: Binding(
                 get: { profileManager.calorieGoal },
                 set: { newValue in
                     profileManager.calorieGoal = newValue
                     profileManager.saveNutritionGoals()
                 }
             ))
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // たんぱく質ピッカー
         .sheet(isPresented: $showProteinPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "たんぱく質目標",
+                emoji: "🥩",
                 value: Binding(
                     get: { profileManager.proteinGoal },
                     set: { newValue in
@@ -224,12 +225,13 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...400,
                 step: 5
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // 炭水化物ピッカー
         .sheet(isPresented: $showCarbPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "炭水化物目標",
+                emoji: "🍚",
                 value: Binding(
                     get: { profileManager.carbGoal },
                     set: { newValue in
@@ -241,12 +243,13 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...600,
                 step: 5
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // 脂質ピッカー
         .sheet(isPresented: $showFatPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "脂質目標",
+                emoji: "🥑",
                 value: Binding(
                     get: { profileManager.fatGoal },
                     set: { newValue in
@@ -258,12 +261,13 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...200,
                 step: 5
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // 糖分ピッカー
         .sheet(isPresented: $showSugarPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "糖分目標",
+                emoji: "🍬",
                 value: Binding(
                     get: { profileManager.sugarGoal },
                     set: { newValue in
@@ -275,12 +279,13 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...100,
                 step: 1
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // 食物繊維ピッカー
         .sheet(isPresented: $showFiberPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "食物繊維目標",
+                emoji: "🌾",
                 value: Binding(
                     get: { profileManager.fiberGoal },
                     set: { newValue in
@@ -292,12 +297,13 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...50,
                 step: 1
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
         // ナトリウムピッカー
         .sheet(isPresented: $showSodiumPicker) {
-            NutrientPickerSheet(
+            ImprovedNutrientPickerSheet(
                 title: "ナトリウム目標",
+                emoji: "🧂",
                 value: Binding(
                     get: { profileManager.sodiumGoal },
                     set: { newValue in
@@ -309,26 +315,115 @@ struct S27_3_NutritionGoalView: View {
                 range: 0...5000,
                 step: 100
             )
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(350)])
         }
     }
     
+    // MARK: - 栄養計算（ユーザーデータから自動生成）
     private func startAutoGeneration() {
         isGenerating = true
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            // ユーザーデータを取得
+            let weight = profileManager.currentWeight > 0 ? profileManager.currentWeight : 70
+            let height = profileManager.height > 0 ? profileManager.height : 170
+            let age = calculateAge()
+            let gender = profileManager.gender
+            let goal = profileManager.goal
+            let exerciseFrequency = profileManager.exerciseFrequency
+            
+            // 1. 基礎代謝量 (BMR) - Mifflin-St Jeor式
+            let bmr: Double
+            if gender == "Male" || gender == "男性" {
+                bmr = 10 * Double(weight) + 6.25 * Double(height) - 5 * Double(age) + 5
+            } else if gender == "Female" || gender == "女性" {
+                bmr = 10 * Double(weight) + 6.25 * Double(height) - 5 * Double(age) - 161
+            } else {
+                // その他の場合は中間値
+                let maleBmr = 10 * Double(weight) + 6.25 * Double(height) - 5 * Double(age) + 5
+                let femaleBmr = 10 * Double(weight) + 6.25 * Double(height) - 5 * Double(age) - 161
+                bmr = (maleBmr + femaleBmr) / 2
+            }
+            
+            // 2. 活動係数
+            let activityMultiplier: Double
+            switch exerciseFrequency {
+            case "めったにしない":
+                activityMultiplier = 1.2
+            case "たまに":
+                activityMultiplier = 1.55
+            case "よくする":
+                activityMultiplier = 1.725
+            default:
+                activityMultiplier = 1.4
+            }
+            
+            // 3. TDEE (1日の総消費カロリー)
+            let tdee = bmr * activityMultiplier
+            
+            // 4. 目標に応じたカロリー調整
+            let targetCalories: Double
+            let proteinRatio: Double
+            let fatRatio: Double
+            let carbRatio: Double
+            
+            switch goal {
+            case "減量":
+                targetCalories = max(1200, tdee * 0.80)
+                proteinRatio = 0.30
+                fatRatio = 0.25
+                carbRatio = 0.45
+            case "増量":
+                targetCalories = tdee * 1.15
+                proteinRatio = 0.25
+                fatRatio = 0.20
+                carbRatio = 0.55
+            default: // 維持
+                targetCalories = tdee
+                proteinRatio = 0.25
+                fatRatio = 0.25
+                carbRatio = 0.50
+            }
+            
+            // 5. PFCを計算
+            let calculatedCalories = Int(targetCalories)
+            let calculatedProtein = Int((targetCalories * proteinRatio) / 4)
+            let calculatedFat = Int((targetCalories * fatRatio) / 9)
+            let calculatedCarbs = Int((targetCalories * carbRatio) / 4)
+            
+            // 6. その他の栄養素
+            let calculatedSugar = Int((targetCalories * 0.05) / 4)
+            let calculatedFiber = Int((targetCalories / 1000) * 14)
+            let calculatedSodium: Int
+            switch goal {
+            case "減量":
+                calculatedSodium = 2000
+            case "増量":
+                calculatedSodium = 2500
+            default:
+                calculatedSodium = 2300
+            }
+            
             withAnimation {
-                profileManager.calorieGoal = 2490
-                profileManager.proteinGoal = 160
-                profileManager.carbGoal = 307
-                profileManager.fatGoal = 69
-                profileManager.sugarGoal = 25
-                profileManager.fiberGoal = 28
-                profileManager.sodiumGoal = 2000
+                profileManager.calorieGoal = calculatedCalories
+                profileManager.proteinGoal = calculatedProtein
+                profileManager.carbGoal = calculatedCarbs
+                profileManager.fatGoal = calculatedFat
+                profileManager.sugarGoal = calculatedSugar
+                profileManager.fiberGoal = calculatedFiber
+                profileManager.sodiumGoal = calculatedSodium
                 profileManager.saveNutritionGoals()
                 isGenerating = false
             }
         }
+    }
+    
+    private func calculateAge() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let birthDate = profileManager.birthDate
+        let ageComponents = calendar.dateComponents([.year], from: birthDate, to: now)
+        return ageComponents.year ?? 25
     }
 }
 
@@ -415,7 +510,7 @@ struct AIGeneratingOverlay: View {
             scale = 1.15
         }
         
-        withAnimation(.easeInOut(duration: 2.5)) {
+        withAnimation(.easeInOut(duration: 2.0)) {
             progress = 1.0
         }
         
@@ -546,8 +641,8 @@ struct NutrientGoalRowCompact: View {
     }
 }
 
-// MARK: - カロリーピッカーシート
-struct CaloriePickerSheet: View {
+// MARK: - 改善されたカロリーピッカーシート
+struct ImprovedCaloriePickerSheet: View {
     @Binding var calories: Int
     @Environment(\.dismiss) private var dismiss
     
@@ -555,6 +650,7 @@ struct CaloriePickerSheet: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // ヘッダー
             HStack {
                 Button("キャンセル") {
                     dismiss()
@@ -564,7 +660,7 @@ struct CaloriePickerSheet: View {
                 Spacer()
                 
                 Text("カロリー目標")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.primary)
                 
                 Spacer()
@@ -576,26 +672,51 @@ struct CaloriePickerSheet: View {
                 .foregroundColor(.orange)
                 .fontWeight(.semibold)
             }
-            .padding()
-            .background(Color(UIColor.secondarySystemBackground))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             
+            Divider()
+            
+            // 現在の値表示
+            VStack(spacing: 4) {
+                Text("🔥")
+                    .font(.system(size: 40))
+                
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text("\(tempCalories)")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(.orange)
+                    
+                    Text("kcal")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.orange.opacity(0.8))
+                }
+            }
+            .padding(.top, 16)
+            
+            // ピッカー
             Picker("カロリー", selection: $tempCalories) {
-                ForEach(Array(stride(from: 1000, through: 5000, by: 10)), id: \.self) { cal in
-                    Text("\(cal) kcal").tag(cal)
+                ForEach(Array(stride(from: 1000, through: 5000, by: 50)), id: \.self) { cal in
+                    Text("\(cal)").tag(cal)
                 }
             }
             .pickerStyle(.wheel)
+            .frame(height: 150)
             .onAppear {
-                tempCalories = calories
+                // 50刻みに丸める
+                tempCalories = ((calories + 25) / 50) * 50
             }
+            
+            Spacer()
         }
         .background(Color(UIColor.systemBackground))
     }
 }
 
-// MARK: - 栄養素ピッカーシート（汎用）
-struct NutrientPickerSheet: View {
+// MARK: - 改善された栄養素ピッカーシート（汎用）
+struct ImprovedNutrientPickerSheet: View {
     let title: String
+    let emoji: String
     @Binding var value: Int
     let unit: String
     let range: ClosedRange<Int>
@@ -607,6 +728,7 @@ struct NutrientPickerSheet: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // ヘッダー
             HStack {
                 Button("キャンセル") {
                     dismiss()
@@ -616,7 +738,7 @@ struct NutrientPickerSheet: View {
                 Spacer()
                 
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.primary)
                 
                 Spacer()
@@ -628,18 +750,44 @@ struct NutrientPickerSheet: View {
                 .foregroundColor(.orange)
                 .fontWeight(.semibold)
             }
-            .padding()
-            .background(Color(UIColor.secondarySystemBackground))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
             
+            Divider()
+            
+            // 現在の値表示
+            VStack(spacing: 4) {
+                Text(emoji)
+                    .font(.system(size: 40))
+                
+                HStack(alignment: .lastTextBaseline, spacing: 4) {
+                    Text("\(tempValue)")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(.orange)
+                    
+                    Text(unit)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.orange.opacity(0.8))
+                }
+            }
+            .padding(.top, 16)
+            
+            // ピッカー
             Picker(title, selection: $tempValue) {
                 ForEach(Array(stride(from: range.lowerBound, through: range.upperBound, by: step)), id: \.self) { val in
-                    Text("\(val) \(unit)").tag(val)
+                    Text("\(val)").tag(val)
                 }
             }
             .pickerStyle(.wheel)
+            .frame(height: 150)
             .onAppear {
-                tempValue = value
+                // stepに丸める
+                tempValue = ((value + step / 2) / step) * step
+                // 範囲内に収める
+                tempValue = min(max(tempValue, range.lowerBound), range.upperBound)
             }
+            
+            Spacer()
         }
         .background(Color(UIColor.systemBackground))
     }

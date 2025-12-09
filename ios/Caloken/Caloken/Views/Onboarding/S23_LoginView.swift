@@ -26,9 +26,27 @@ struct S23_LoginView: View {
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
+                // カスタム戻るボタン（ナビゲーションバーの代わり）
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .frame(width: 44, height: 44)
+                            .background(Color(UIColor.systemGray5))
+                            .clipShape(Circle())
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                
                 // iPhone モックアップ
                 LoginPhoneMockupView()
-                    .padding(.top, 40)
+                    .padding(.top, 20)
                 
                 Spacer()
                 
@@ -96,21 +114,7 @@ struct S23_LoginView: View {
                     .scaleEffect(1.5)
             }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    // S1に戻る
-                    dismiss()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .semibold))
-                    }
-                    .foregroundColor(.primary)
-                }
-            }
-        }
+        .navigationBarHidden(true)
         .navigationDestination(isPresented: $navigateToPaywall) {
             S51_PaywallView()
         }
@@ -407,110 +411,111 @@ struct LoginPhoneMockupView: View {
             // iPhone フレーム
             RoundedRectangle(cornerRadius: 40)
                 .fill(Color(red: 0.85, green: 0.65, blue: 0.2))
-                .frame(width: 280, height: 560)
+                .frame(width: 260, height: 520)
                 .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
             
             RoundedRectangle(cornerRadius: 35)
                 .fill(Color.black)
-                .frame(width: 268, height: 548)
+                .frame(width: 248, height: 508)
             
             RoundedRectangle(cornerRadius: 30)
                 .fill(Color(UIColor.systemBackground))
-                .frame(width: 256, height: 536)
+                .frame(width: 236, height: 496)
             
             // アプリ画面のモック
             VStack(spacing: 0) {
                 HStack {
                     Text("22:22")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.primary)
                     Spacer()
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Image(systemName: "cellularbars")
                         Image(systemName: "wifi")
                         Image(systemName: "battery.100")
                     }
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundColor(.primary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
                 
                 HStack {
                     Text("🏠")
-                        .font(.system(size: 20))
+                        .font(.system(size: 18))
                     Text("カロ研")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.primary)
                     Spacer()
                     Image(systemName: "gearshape")
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
                 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     ForEach(["火", "水", "木", "金", "土", "日", "月"], id: \.self) { day in
-                        VStack(spacing: 4) {
+                        VStack(spacing: 3) {
                             Text(day)
-                                .font(.system(size: 10))
+                                .font(.system(size: 9))
                                 .foregroundColor(.secondary)
                             
                             Circle()
                                 .stroke(day == "土" ? Color.orange : Color(UIColor.systemGray4), lineWidth: 1)
-                                .frame(width: 24, height: 24)
+                                .frame(width: 22, height: 22)
                                 .overlay(
                                     Text("\(3 + (["火", "水", "木", "金", "土", "日", "月"].firstIndex(of: day) ?? 0))")
-                                        .font(.system(size: 10))
+                                        .font(.system(size: 9))
                                         .foregroundColor(.primary)
                                 )
                         }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
                 
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     ZStack {
                         Circle()
                             .trim(from: 0.5, to: 1)
-                            .stroke(Color(UIColor.systemGray4), lineWidth: 8)
-                            .frame(width: 120, height: 120)
+                            .stroke(Color(UIColor.systemGray4), lineWidth: 7)
+                            .frame(width: 110, height: 110)
                         
                         Circle()
                             .trim(from: 0.5, to: 0.53)
-                            .stroke(Color.orange, lineWidth: 8)
-                            .frame(width: 120, height: 120)
+                            .stroke(Color.orange, lineWidth: 7)
+                            .frame(width: 110, height: 110)
                         
                         VStack(spacing: 0) {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text("150")
-                                    .font(.system(size: 24, weight: .bold))
+                                    .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.primary)
                                 Text("/2241")
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 12))
                                     .foregroundColor(.secondary)
                             }
                             Text("摂取kcal")
-                                .font(.system(size: 10))
+                                .font(.system(size: 9))
                                 .foregroundColor(.secondary)
                         }
-                        .offset(y: 10)
+                        .offset(y: 8)
                     }
-                    .frame(height: 80)
+                    .frame(height: 70)
                     
-                    VStack(spacing: 6) {
+                    VStack(spacing: 5) {
                         LoginNutrientBar(emoji: "🍖", label: "たんぱく質", current: 2, total: 162)
                         LoginNutrientBar(emoji: "🥑", label: "脂質", current: 1, total: 62)
                         LoginNutrientBar(emoji: "🍚", label: "炭水化物", current: 38, total: 258)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 10)
                 }
-                .padding(12)
+                .padding(10)
                 .background(Color(UIColor.secondarySystemGroupedBackground))
-                .cornerRadius(12)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+                .cornerRadius(10)
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
                 
                 Spacer()
                 
@@ -518,9 +523,9 @@ struct LoginPhoneMockupView: View {
                     Spacer()
                     VStack(spacing: 2) {
                         Image(systemName: "house.fill")
-                            .font(.system(size: 18))
+                            .font(.system(size: 16))
                         Text("ホーム")
-                            .font(.system(size: 9))
+                            .font(.system(size: 8))
                     }
                     .foregroundColor(.orange)
                     
@@ -528,10 +533,10 @@ struct LoginPhoneMockupView: View {
                     
                     Circle()
                         .fill(Color.orange)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "plus")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
                         )
                     
@@ -539,17 +544,17 @@ struct LoginPhoneMockupView: View {
                     
                     VStack(spacing: 2) {
                         Image(systemName: "chart.bar")
-                            .font(.system(size: 18))
+                            .font(.system(size: 16))
                         Text("進捗")
-                            .font(.system(size: 9))
+                            .font(.system(size: 8))
                     }
                     .foregroundColor(.secondary)
                     
                     Spacer()
                 }
-                .padding(.bottom, 8)
+                .padding(.bottom, 6)
             }
-            .frame(width: 256, height: 536)
+            .frame(width: 236, height: 496)
         }
     }
 }
@@ -561,11 +566,11 @@ struct LoginNutrientBar: View {
     let total: Int
     
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text("\(emoji) \(label)")
-                .font(.system(size: 9))
+                .font(.system(size: 8))
                 .foregroundColor(.primary)
-                .frame(width: 70, alignment: .leading)
+                .frame(width: 65, alignment: .leading)
             
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -577,12 +582,12 @@ struct LoginNutrientBar: View {
                         .frame(width: geometry.size.width * CGFloat(current) / CGFloat(total))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
             
             Text("\(current)/\(total)g")
-                .font(.system(size: 9))
+                .font(.system(size: 8))
                 .foregroundColor(.secondary)
-                .frame(width: 50, alignment: .trailing)
+                .frame(width: 45, alignment: .trailing)
         }
     }
 }
