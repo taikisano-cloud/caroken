@@ -96,7 +96,21 @@ struct S23_LoginView: View {
                     .scaleEffect(1.5)
             }
         }
-        .navigationBarBackButtonHidden(false)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    // S1に戻る
+                    dismiss()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.primary)
+                }
+            }
+        }
         .navigationDestination(isPresented: $navigateToPaywall) {
             S51_PaywallView()
         }
@@ -113,6 +127,7 @@ struct S23_LoginView: View {
         }
         .onChange(of: authService.isLoggedIn) { _, newValue in
             if newValue {
+                print("✅ Auth state changed: isLoggedIn = true, navigating to paywall")
                 navigateToPaywall = true
             }
         }
@@ -204,7 +219,7 @@ struct S23_LoginView: View {
     // MARK: - Email Login Form
     private var emailLoginForm: some View {
         VStack(spacing: 16) {
-            // 戻るボタン
+            // 戻るボタン（メールフォームから戻る）
             HStack {
                 Button {
                     withAnimation {
@@ -276,11 +291,19 @@ struct S23_LoginView: View {
     
     // MARK: - Google Sign In
     private func signInWithGoogle() {
+        isSigningIn = true
         Task {
             do {
                 try await authService.signInWithGoogle()
+                // ✅ 認証成功後、明示的に遷移
+                await MainActor.run {
+                    isSigningIn = false
+                    print("✅ Google Sign In completed, navigating to paywall")
+                    navigateToPaywall = true
+                }
             } catch {
                 await MainActor.run {
+                    isSigningIn = false
                     errorMessage = error.localizedDescription
                     showError = true
                 }
@@ -290,14 +313,22 @@ struct S23_LoginView: View {
     
     // MARK: - Email Sign In
     private func emailSignIn() async {
+        isSigningIn = true
         do {
             if isSignUp {
                 try await authService.signUp(email: email, password: password)
             } else {
                 try await authService.signIn(email: email, password: password)
             }
+            // ✅ 認証成功後、明示的に遷移
+            await MainActor.run {
+                isSigningIn = false
+                print("✅ Email Sign In completed, navigating to paywall")
+                navigateToPaywall = true
+            }
         } catch {
             await MainActor.run {
+                isSigningIn = false
                 errorMessage = error.localizedDescription
                 showError = true
             }

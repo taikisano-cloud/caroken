@@ -11,10 +11,12 @@ settings = get_settings()
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
+# ============================================
 # モデル設定
-# Flash: 高速・高品質（高速モード、画像分析用）  
-model_flash = genai.GenerativeModel('gemini-2.0-flash-exp')
-# Pro: 最高精度（思考モード用）
+# ============================================
+# Flash Lite: 高速モード用
+model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')
+# Pro: 高精度（画像分析、食事分析、思考モード用）
 model_pro = genai.GenerativeModel('gemini-2.5-pro')
 
 
@@ -25,9 +27,16 @@ class GeminiService:
     async def analyze_meal_image(image_base64: str) -> DetailedMealAnalysis:
         """
         食事画像を分析してカロリー・栄養素を推定
+        ✅ Proモデル使用（高精度）
         """
         prompt = """
-あなたは栄養士AIです。この食事の画像を分析してください。
+あなたは経験豊富な栄養士AIです。この食事の画像を詳細に分析してください。
+
+【分析のポイント】
+- 各食品の量を正確に推定する（見た目から判断）
+- 調理法を考慮する（揚げ物は脂質が多いなど）
+- 調味料やソースも考慮する
+- 日本の一般的な食事のカロリーを参考にする
 
 以下のJSON形式で回答してください（JSONのみ、説明なし）：
 {
@@ -56,8 +65,8 @@ class GeminiService:
             # Base64画像をデコード
             image_data = base64.b64decode(image_base64)
             
-            # ✅ Flash モデルを使用（高速かつ画像分析に最適）
-            response = model_flash.generate_content([
+            # ✅ Pro モデルを使用（高精度分析）
+            response = model_pro.generate_content([
                 prompt,
                 {"mime_type": "image/jpeg", "data": image_data}
             ])
@@ -88,7 +97,7 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
-            # エラー時のフォールバック
+            print(f"Gemini analyze_meal_image error: {e}")
             return DetailedMealAnalysis(
                 food_items=[
                     FoodItem(
@@ -114,11 +123,18 @@ class GeminiService:
     async def analyze_meal_text(description: str) -> DetailedMealAnalysis:
         """
         テキストから食事のカロリー・栄養素を推定
+        ✅ Proモデル使用（高精度）
         """
         prompt = f"""
-あなたは栄養士AIです。以下の食事内容を分析してカロリーと栄養素を推定してください。
+あなたは経験豊富な栄養士AIです。以下の食事内容を詳細に分析してカロリーと栄養素を推定してください。
 
 食事内容: {description}
+
+【分析のポイント】
+- 食品名から一般的な量を推定する
+- 調理法を考慮する（揚げ物、炒め物など）
+- 日本の一般的な食事のカロリーを参考にする
+- 不明な場合は一般的な値を使用する
 
 以下のJSON形式で回答してください（JSONのみ、説明なし）：
 {{
@@ -144,8 +160,8 @@ class GeminiService:
 """
         
         try:
-            # ✅ Flash モデルを使用（高速）
-            response = model_flash.generate_content(prompt)
+            # ✅ Pro モデルを使用（高精度分析）
+            response = model_pro.generate_content(prompt)
             result_text = response.text
             json_match = re.search(r'\{[\s\S]*\}', result_text)
             
@@ -171,6 +187,7 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
+            print(f"Gemini analyze_meal_text error: {e}")
             return DetailedMealAnalysis(
                 food_items=[
                     FoodItem(
@@ -199,11 +216,15 @@ class GeminiService:
         image_base64: Optional[str] = None,
         chat_history: Optional[list] = None,
         mode: str = "fast",
-        user_memories: Optional[list] = None  # ✅ ユーザー記憶
+        user_memories: Optional[list] = None
     ) -> dict:
         """
         カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
-        mode: "fast" = 高速モード（Flash）, "thinking" = 思考モード（Pro）
+        
+        mode: 
+        - "fast" = 高速モード（Flash Lite）
+        - "thinking" = 思考モード（Pro）
+        
         Returns: {"response": str, "memory_to_save": Optional[dict]}
         """
         from datetime import datetime
@@ -237,14 +258,12 @@ class GeminiService:
         # ユーザー記憶があれば追加
         if user_memories and len(user_memories) > 0:
             context += "\n【覚えていること】\n"
-            for mem in user_memories[-10:]:  # 直近10件
+            for mem in user_memories[-10:]:
                 context += f"- {mem.get('content', '')}（{mem.get('category', '')}）\n"
         
         if user_context:
-            # 基本情報
             context += "\n【ユーザー情報】\n"
             
-            # 身体情報
             if user_context.get('gender'):
                 context += f"- 性別: {user_context.get('gender')}\n"
             if user_context.get('age'):
@@ -257,14 +276,11 @@ class GeminiService:
                 context += f"- 目標体重: {user_context.get('target_weight')}kg\n"
             if user_context.get('bmi'):
                 context += f"- BMI: {user_context.get('bmi')} ({user_context.get('bmi_status', '')})\n"
-            
-            # 目標
             if user_context.get('goal'):
                 context += f"- 目標: {user_context.get('goal')}\n"
             if user_context.get('exercise_frequency'):
                 context += f"- 運動頻度: {user_context.get('exercise_frequency')}\n"
             
-            # 栄養目標
             context += "\n【今日の状況】\n"
             if user_context.get('today_calories') is not None:
                 context += f"- 摂取カロリー: {user_context.get('today_calories')}kcal"
@@ -300,7 +316,6 @@ class GeminiService:
                 else:
                     context += f"- 残りカロリー: {abs(remaining)}kcalオーバー⚠️\n"
             
-            # 今日の食事内容があれば追加
             if user_context.get('today_meals'):
                 context += f"\n今日食べたもの: {user_context.get('today_meals')}\n"
         
@@ -308,7 +323,7 @@ class GeminiService:
         history_text = ""
         if chat_history and len(chat_history) > 0:
             history_text = "\n\n【これまでの会話】\n"
-            for msg in chat_history[-10:]:  # 直近10件まで
+            for msg in chat_history[-10:]:
                 role = "ユーザー" if msg.get('is_user') else "カロちゃん"
                 history_text += f"{role}: {msg.get('message', '')}\n"
         
@@ -318,20 +333,26 @@ class GeminiService:
 
 【性格】
 - 明るくて元気、ユーザーを励ます
-- 語尾に「にゃ」「だにゃ」をつける
+- 語尾に「にゃ」「だにゃ」をつける（毎文ではなく自然に）
 - 絵文字を適度に使う（🐱😊🔥💪🍽️など）
 - 専門的なアドバイスも分かりやすく伝える
 - ユーザーの食事や健康について具体的なアドバイスをする
 - 時間帯に合わせた自然な挨拶や話題を心がける
 
-【重要】
-- ユーザーの情報（性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
-- 会話の流れを理解して、自然に返答する
-- 毎回カロリーの話をするのではなく、ユーザーの質問や話題に合わせる
-- 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
-- 過去の会話を参照して、一貫性のある返答をする
-- ユーザーの目標（減量/維持/増量）に合わせたアドバイスをする
-- 現在の時刻を意識した返答をする（朝なら「おはよう」、夜なら「お疲れ様」など）
+【重要な行動指針】
+1. ユーザーの質問や話題にしっかり答える（話をそらさない）
+2. ユーザー情報を活用してパーソナライズされた回答をする
+3. 会話の流れを理解して、文脈に沿った返答をする
+4. 毎回カロリーの話をしない（ユーザーが聞いてきたときだけ）
+5. 料理の提案、レシピ、励まし、雑談など多様な会話ができる
+6. 過去の会話や記憶を参照して一貫性を保つ
+7. ユーザーの目標（減量/維持/増量）を常に意識する
+
+【回答の質を高めるポイント】
+- 具体的な数値やアドバイスを含める
+- ユーザーの状況に合わせた提案をする
+- 質問には直接的に答える
+- 必要なら理由も簡潔に説明する
 
 {context}
 {history_text}
@@ -339,28 +360,28 @@ class GeminiService:
 【現在のユーザーのメッセージ】
 {message}
 
-カロちゃんとして自然に返答してください（2-4文程度）:
+カロちゃんとして、上記の指針に従って自然に返答してください:
 """
         
         try:
             # ✅ モードに応じてモデルを選択
             if image_base64:
                 image_data = base64.b64decode(image_base64)
-                # 画像付きの場合はFlashモデル
-                response = model_flash.generate_content([
+                # 画像付きの場合はProモデル
+                response = model_pro.generate_content([
                     system_prompt,
                     {"mime_type": "image/jpeg", "data": image_data}
                 ])
             elif mode == "thinking":
-                # 思考モード: Proモデル（最高精度）
+                # 思考モード: Proモデル
                 response = model_pro.generate_content(system_prompt)
             else:
-                # 高速モード: Flashモデル
-                response = model_flash.generate_content(system_prompt)
+                # 高速モード: Flash Liteモデル
+                response = model_flash_lite.generate_content(system_prompt)
             
             response_text = response.text.strip()
             
-            # ✅ 記憶抽出（バックグラウンドで実行）
+            # ✅ 記憶抽出
             memory_to_save = await GeminiService.extract_memory(message, response_text)
             
             return {
@@ -369,7 +390,7 @@ class GeminiService:
             }
             
         except Exception as e:
-            print(f"Gemini API Error: {e}")
+            print(f"Gemini chat API Error: {e}")
             return {
                 "response": f"ごめんにゃ、{time_period}なのにちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！",
                 "memory_to_save": None
@@ -387,14 +408,16 @@ class GeminiService:
     ) -> str:
         """
         ホーム画面用のアドバイスを生成
+        ✅ Flash Liteモデル使用（高速）
         """
         remaining = goal_calories - today_calories
         progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
         
-        # 時間帯を考慮
         from datetime import datetime
-        hour = datetime.now().hour
-        time_context = ""
+        import pytz
+        jst = pytz.timezone('Asia/Tokyo')
+        hour = datetime.now(jst).hour
+        
         if hour < 10:
             time_context = "朝の時間帯"
         elif hour < 14:
@@ -423,27 +446,20 @@ class GeminiService:
 - 語尾に「にゃ」をつける
 - 絵文字を1-2個使う
 - 具体的で役立つアドバイスにする
-- 状況に応じて変化させる
-
-例:
-- 「朝ごはんまだみたいだにゃ！軽くでもいいから食べてほしいにゃ🍳」
-- 「いい感じに進んでるにゃ！あと{remaining}kcalだから夕食は軽めがおすすめだにゃ🐱」
-- 「たんぱく質がちょっと少ないかも...お肉かお魚を食べるといいにゃ💪」
 """
         
         try:
-            # ✅ Flash モデルを使用
-            response = model_flash.generate_content(prompt)
+            response = model_flash_lite.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
-            print(f"Gemini API Error (advice): {e}")
+            print(f"Gemini generate_advice API Error: {e}")
             return "今日も一緒にがんばろうにゃ！🐱"
     
     @staticmethod
     async def extract_memory(message: str, response: str) -> Optional[dict]:
         """
         会話から重要な情報を抽出して記憶として保存するか判断
-        期限付きの記憶を生成（誕生日、予定などは期限付き）
+        ✅ Flash Liteモデル使用（高速）
         """
         prompt = f"""
 以下の会話から、覚えておくべき重要な情報があるか判断してください。
@@ -472,24 +488,15 @@ class GeminiService:
     "importance": 1-5の数字,
     "expires_in_days": null（永続）または数字（何日後に期限切れ）
 }}
-
-expires_in_days の目安:
-- preference/health/habit: null（永続）
-- goal: null または 90（3ヶ月）
-- event: イベントまでの日数 + 1日
-- temporary: 1（翌日には忘れる）
 """
         
         try:
-            # ✅ Flash モデルを使用
-            result = model_flash.generate_content(prompt)
+            result = model_flash_lite.generate_content(prompt)
             text = result.text.strip()
             
             if text.lower() == "null" or text == "":
                 return None
             
-            # JSONをパース
-            # ```json などのマークダウンを除去
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
@@ -497,7 +504,6 @@ expires_in_days の目安:
             
             memory = json.loads(text.strip())
             
-            # 有効期限を計算
             from datetime import datetime, timedelta
             if memory.get('expires_in_days') is not None:
                 expires_at = datetime.now() + timedelta(days=memory['expires_in_days'])
