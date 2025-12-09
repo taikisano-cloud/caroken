@@ -2,6 +2,33 @@ import SwiftUI
 import PhotosUI
 import Combine
 
+// MARK: - チャットモード
+enum ChatMode: String, CaseIterable {
+    case fast = "fast"
+    case thinking = "thinking"
+    
+    var displayName: String {
+        switch self {
+        case .fast: return "高速"
+        case .thinking: return "思考"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .fast: return "bolt.fill"
+        case .thinking: return "brain.head.profile"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .fast: return "素早く簡潔な回答"
+        case .thinking: return "じっくり詳しい回答"
+        }
+    }
+}
+
 // MARK: - チャットメッセージマネージャー（日毎管理・画像対応）
 final class ChatMessagesManager: ObservableObject {
     static let shared = ChatMessagesManager()
@@ -102,6 +129,8 @@ struct CaloChatView: View {
     @State private var typingTask: Task<Void, Never>?
     @State private var errorMessage: String?
     @State private var hasScrolledToBottom: Bool = false
+    @State private var chatMode: ChatMode = .fast
+    @State private var textEditorHeight: CGFloat = 40
     @FocusState private var isTextFieldFocused: Bool
     
     private let chatManager = ChatMessagesManager.shared
@@ -109,7 +138,7 @@ struct CaloChatView: View {
     private let profileManager = UserProfileManager.shared
     
     private var canSend: Bool {
-        !isTyping && (!messageText.isEmpty || pendingImage != nil)
+        !isTyping && (!messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || pendingImage != nil)
     }
     
     private var hasMessages: Bool {
@@ -118,16 +147,8 @@ struct CaloChatView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // 日付表示
-            HStack {
-                Spacer()
-                Text(formatDate(selectedDate))
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                Spacer()
-            }
-            .padding(.vertical, 8)
-            .background(Color(UIColor.systemGroupedBackground))
+            // モード切り替え + 日付表示
+            headerView
             
             if hasMessages {
                 chatHistoryView
@@ -144,7 +165,7 @@ struct CaloChatView: View {
                     .padding(.vertical, 4)
             }
             
-            // 入力エリア（チャット欄と一体化）
+            // 入力エリア
             inputArea
         }
         .background(Color(UIColor.systemGroupedBackground))
@@ -170,6 +191,48 @@ struct CaloChatView: View {
         .onDisappear {
             typingTask?.cancel()
         }
+    }
+    
+    // MARK: - ヘッダー（モード切り替え + 日付）
+    private var headerView: some View {
+        VStack(spacing: 8) {
+            // モード切り替えセグメント
+            HStack(spacing: 0) {
+                ForEach(ChatMode.allCases, id: \.self) { mode in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            chatMode = mode
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: mode.icon)
+                                .font(.system(size: 12, weight: .medium))
+                            Text(mode.displayName)
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(chatMode == mode ? .white : .primary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            chatMode == mode ?
+                            (mode == .fast ? Color.orange : Color.purple) :
+                            Color.clear
+                        )
+                        .cornerRadius(20)
+                    }
+                }
+            }
+            .padding(4)
+            .background(Color(UIColor.tertiarySystemFill))
+            .cornerRadius(24)
+            
+            // 日付表示
+            Text(formatDate(selectedDate))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 8)
+        .background(Color(UIColor.systemGroupedBackground))
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -213,10 +276,41 @@ struct CaloChatView: View {
                     .multilineTextAlignment(.center)
             }
             
+            // モード説明
+            VStack(spacing: 12) {
+                modeExplanationRow(mode: .fast)
+                modeExplanationRow(mode: .thinking)
+            }
+            .padding(.horizontal, 40)
+            .padding(.top, 16)
+            
             Spacer()
             Spacer()
         }
         .padding(.horizontal, 20)
+    }
+    
+    private func modeExplanationRow(mode: ChatMode) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: mode.icon)
+                .font(.system(size: 16))
+                .foregroundColor(mode == .fast ? .orange : .purple)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mode.displayName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(mode.description)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(12)
     }
     
     private var chatHistoryView: some View {
@@ -229,14 +323,13 @@ struct CaloChatView: View {
                     }
                     
                     if isTyping {
-                        TypingIndicator()
+                        TypingIndicator(mode: chatMode)
                             .id("typing")
                     }
                 }
                 .padding(16)
             }
             .onAppear {
-                // 画面表示時に最新メッセージにスクロール
                 if !hasScrolledToBottom {
                     scrollToBottomImmediate(proxy: proxy)
                     hasScrolledToBottom = true
@@ -256,7 +349,7 @@ struct CaloChatView: View {
         }
     }
     
-    // MARK: - 入力エリア
+    // MARK: - 入力エリア（TextEditor対応）
     private var inputArea: some View {
         VStack(spacing: 0) {
             Divider()
@@ -300,7 +393,7 @@ struct CaloChatView: View {
             }
             
             // 入力欄
-            HStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 12) {
                 // 画像添付ボタン
                 PhotosPicker(selection: $selectedItem, matching: .images) {
                     Image(systemName: pendingImage == nil ? "plus" : "photo.fill")
@@ -313,27 +406,37 @@ struct CaloChatView: View {
                     handleImageSelection(newItem)
                 }
                 
-                // テキスト入力フィールド
-                TextField("カロちゃんに相談", text: $messageText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 17))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(UIColor.tertiarySystemFill))
-                    .cornerRadius(22)
-                    .focused($isTextFieldFocused)
-                    .disabled(isTyping)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        if canSend {
-                            sendMessage()
-                        }
+                // テキスト入力フィールド（TextEditor - 改行対応）
+                ZStack(alignment: .topLeading) {
+                    // プレースホルダー
+                    if messageText.isEmpty {
+                        Text("カロちゃんに相談")
+                            .font(.system(size: 17))
+                            .foregroundColor(Color(UIColor.placeholderText))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
                     }
-                    .onChange(of: messageText) { _, newValue in
-                        if newValue.count > maxCharacterCount {
-                            messageText = String(newValue.prefix(maxCharacterCount))
+                    
+                    // TextEditor（改行可能）
+                    TextEditor(text: $messageText)
+                        .font(.system(size: 17))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .frame(minHeight: 40, maxHeight: 120)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .focused($isTextFieldFocused)
+                        .disabled(isTyping)
+                        .onChange(of: messageText) { _, newValue in
+                            // 文字数制限
+                            if newValue.count > maxCharacterCount {
+                                messageText = String(newValue.prefix(maxCharacterCount))
+                            }
                         }
-                    }
+                }
+                .background(Color(UIColor.tertiarySystemFill))
+                .cornerRadius(20)
                 
                 // 送信ボタン
                 Button {
@@ -393,19 +496,23 @@ struct CaloChatView: View {
     }
     
     private func sendMessage() {
-        guard !messageText.isEmpty || pendingImage != nil else { return }
+        let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty || pendingImage != nil else { return }
         
-        let textToSend = messageText.isEmpty ? nil : messageText
+        let textToSend = trimmedText.isEmpty ? nil : trimmedText
         let imageToSend = pendingImage
         
         let userMessage = ChatMessage(isUser: true, text: textToSend, image: imageToSend)
         messages.append(userMessage)
         chatManager.addMessage(userMessage, for: selectedDate)
         
-        let userText = messageText.isEmpty ? "画像を送信しました" : messageText
+        let userText = trimmedText.isEmpty ? "画像を送信しました" : trimmedText
         messageText = ""
         pendingImage = nil
         errorMessage = nil
+        
+        // キーボードを閉じる
+        isTextFieldFocused = false
         
         // APIを呼び出し（ユーザー情報付き）
         sendToAPIWithUserContext(message: userText, image: imageToSend)
@@ -434,7 +541,7 @@ struct CaloChatView: View {
             "bmi_status": pm.bmiStatus,
             
             // 目標
-            "goal": pm.goal,  // 減量/維持/増量
+            "goal": pm.goal,
             "exercise_frequency": pm.exerciseFrequency,
             
             // 栄養目標
@@ -455,7 +562,7 @@ struct CaloChatView: View {
         ]
     }
     
-    // MARK: - API呼び出し（ユーザーコンテキスト付き）
+    // MARK: - API呼び出し（ユーザーコンテキスト付き + モード対応）
     private func sendToAPIWithUserContext(message: String, image: UIImage?) {
         isTyping = true
         
@@ -474,12 +581,13 @@ struct CaloChatView: View {
                 // 会話履歴を取得
                 let chatHistory = chatManager.chatHistoryForAPI(for: selectedDate)
                 
-                // API呼び出し
+                // API呼び出し（モードを渡す）
                 let response = try await network.sendChatWithUserContext(
                     message: message,
                     imageBase64: imageBase64,
                     chatHistory: chatHistory,
-                    userContext: userContext
+                    userContext: userContext,
+                    mode: chatMode.rawValue  // "fast" または "thinking"
                 )
                 
                 if !Task.isCancelled {
@@ -520,8 +628,9 @@ struct CaloChatView: View {
     }
 }
 
-// MARK: - タイピングインジケーター
+// MARK: - タイピングインジケーター（モード対応）
 struct TypingIndicator: View {
+    let mode: ChatMode
     @State private var dotCount = 0
     
     let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
@@ -546,16 +655,27 @@ struct TypingIndicator: View {
                     .frame(width: 10, height: 14)
                     .offset(y: 14)
                 
-                HStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { index in
-                        Circle()
-                            .fill(Color.gray)
-                            .frame(width: 8, height: 8)
-                            .scaleEffect(dotCount == index ? 1.3 : 1.0)
-                            .animation(.easeInOut(duration: 0.3), value: dotCount)
+                VStack(alignment: .leading, spacing: 4) {
+                    // モード表示
+                    HStack(spacing: 4) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 10))
+                        Text(mode == .thinking ? "考え中..." : "入力中...")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundColor(mode == .fast ? .orange : .purple)
+                    
+                    HStack(spacing: 6) {
+                        ForEach(0..<3, id: \.self) { index in
+                            Circle()
+                                .fill(mode == .fast ? Color.orange : Color.purple)
+                                .frame(width: 8, height: 8)
+                                .scaleEffect(dotCount == index ? 1.3 : 1.0)
+                                .animation(.easeInOut(duration: 0.3), value: dotCount)
+                        }
                     }
                 }
-                .padding(16)
+                .padding(12)
                 .background(Color(UIColor.secondarySystemGroupedBackground))
                 .cornerRadius(16)
             }
@@ -576,7 +696,7 @@ struct ChatMessage: Identifiable {
     let image: UIImage?
 }
 
-// MARK: - チャット吹き出し（ChatGPT風の大きめフォント）
+// MARK: - チャット吹き出し
 struct ChatBubble: View {
     let message: ChatMessage
     
@@ -594,7 +714,7 @@ struct ChatBubble: View {
                     }
                     if let text = message.text, !text.isEmpty {
                         Text(text)
-                            .font(.system(size: 16))  // ChatGPT風の大きさ
+                            .font(.system(size: 16))
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -631,7 +751,7 @@ struct ChatBubble: View {
                     
                     if let text = message.text {
                         Text(text)
-                            .font(.system(size: 16))  // ChatGPT風の大きさ
+                            .font(.system(size: 16))
                             .foregroundColor(.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)

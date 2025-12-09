@@ -207,7 +207,7 @@ struct MetricsTabView: View {
     }
 }
 
-// MARK: - カロリー + アドバイスカード
+// MARK: - カロリー + アドバイスカード（API対応）
 struct CalorieWithAdviceCard: View {
     @Binding var selectedDate: Date
     @Binding var showNutritionGoal: Bool
@@ -216,11 +216,12 @@ struct CalorieWithAdviceCard: View {
     @ObservedObject private var exerciseLogsManager = ExerciseLogsManager.shared
     @ObservedObject private var profileManager = UserProfileManager.shared
     
+    @State private var adviceText: String = "今日も一緒にがんばろうにゃ！🐱"
+    @State private var isLoadingAdvice: Bool = false
+    @State private var lastFetchedDate: Date? = nil
+    
     var baseTarget: Int { profileManager.calorieGoal }
-    
-    // 全運動の消費カロリー
     var exerciseBonus: Int { exerciseLogsManager.totalCaloriesBurned(for: selectedDate) }
-    
     var target: Int { baseTarget + exerciseBonus }
     var current: Int { logsManager.totalCalories(for: selectedDate) }
     
@@ -231,25 +232,11 @@ struct CalorieWithAdviceCard: View {
     
     var isOverTarget: Bool { current > target }
     
-    var adviceText: String {
-        let nutrients = logsManager.totalNutrients(for: selectedDate)
-        if current == 0 {
-            return "今日はまだ何も食べてないにゃ🐱\n何か記録してみよう！"
-        } else if nutrients.protein < 50 {
-            return "今日はタンパク質が不足気味だにゃ🐱夕食でお肉か魚を食べるといいかも！"
-        } else if current > target {
-            return "今日はカロリーオーバーだにゃ😅明日は少し控えめにしよう！"
-        } else {
-            return "いい感じだにゃ🐱バランスよく食べられてるよ！この調子✨"
-        }
-    }
-    
     var body: some View {
         VStack(spacing: 8) {
-            // カロリーカード（円グラフ + 数字）
+            // カロリーカード
             Button { showNutritionGoal = true } label: {
                 HStack(spacing: 0) {
-                    // 左側：円グラフ
                     ZStack {
                         Circle()
                             .stroke(Color(UIColor.systemGray4), lineWidth: 10)
@@ -284,7 +271,6 @@ struct CalorieWithAdviceCard: View {
                     }
                     .padding(.leading, 16)
                     
-                    // 右側：カロリー数字（中央揃え）
                     VStack(alignment: .center, spacing: 4) {
                         Text("摂取カロリー")
                             .font(.system(size: 14, weight: .medium))
@@ -299,7 +285,6 @@ struct CalorieWithAdviceCard: View {
                                 .foregroundColor(.secondary)
                         }
                         
-                        // 運動ボーナス（小さめ）
                         if exerciseBonus > 0 {
                             HStack(spacing: 4) {
                                 Image(systemName: "figure.run")
@@ -326,7 +311,7 @@ struct CalorieWithAdviceCard: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // アドバイスカード（カロちゃん）
+            // アドバイスカード（API対応）
             Button { showChat = true } label: {
                 HStack(alignment: .center, spacing: 0) {
                     Image("caloken_full")
@@ -340,11 +325,21 @@ struct CalorieWithAdviceCard: View {
                             .frame(width: 10, height: 20)
                         
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(adviceText)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.primary)
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(4)
+                            if isLoadingAdvice {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("考え中...")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.secondary)
+                                }
+                            } else {
+                                Text(adviceText)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(4)
+                            }
                             
                             HStack {
                                 Spacer()
@@ -370,6 +365,72 @@ struct CalorieWithAdviceCard: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
+        .onAppear {
+            fetchAdviceIfNeeded()
+        }
+        .onChange(of: selectedDate) { _, newDate in
+            fetchAdviceIfNeeded()
+        }
+        .onChange(of: current) { _, _ in
+            fetchAdviceIfNeeded()
+        }
+    }
+    
+    // MARK: - APIからアドバイスを取得
+    private func fetchAdviceIfNeeded() {
+        // 同じ日で既に取得済みならスキップ（5分間隔で更新）
+        if let lastDate = lastFetchedDate,
+           Calendar.current.isDate(lastDate, inSameDayAs: selectedDate),
+           Date().timeIntervalSince(lastDate) < 300 {
+            return
+        }
+        
+        isLoadingAdvice = true
+        
+        Task {
+            do {
+                let nutrients = logsManager.totalNutrients(for: selectedDate)
+                let mealCount = logsManager.logs(for: selectedDate).count
+                let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }.joined(separator: "、")
+                
+                let advice = try await NetworkManager.shared.fetchHomeAdvice(
+                    todayCalories: current,
+                    goalCalories: target,
+                    todayProtein: nutrients.protein,
+                    todayFat: nutrients.fat,
+                    todayCarbs: nutrients.carbs,
+                    todayMeals: todayMeals,
+                    mealCount: mealCount
+                )
+                
+                await MainActor.run {
+                    adviceText = advice
+                    isLoadingAdvice = false
+                    lastFetchedDate = Date()
+                }
+            } catch {
+                await MainActor.run {
+                    // エラー時はローカルのフォールバックを使用
+                    adviceText = generateLocalAdvice()
+                    isLoadingAdvice = false
+                    lastFetchedDate = Date()
+                }
+            }
+        }
+    }
+    
+    // MARK: - ローカルフォールバック
+    private func generateLocalAdvice() -> String {
+        let nutrients = logsManager.totalNutrients(for: selectedDate)
+        if current == 0 {
+            return "今日はまだ何も食べてないにゃ🐱\n何か記録してみよう！"
+        } else if nutrients.protein < 50 {
+            return "今日はタンパク質が不足気味だにゃ🐱夕食でお肉か魚を食べるといいかも！"
+        } else if current > target {
+            return "今日はカロリーオーバーだにゃ😅明日は少し控えめにしよう！"
+        } else {
+            return "いい感じだにゃ🐱バランスよく食べられてるよ！この調子✨"
+        }
     }
 }
 
@@ -384,29 +445,31 @@ struct AdviceBubbleArrow: Shape {
     }
 }
 
-// MARK: - 栄養素カード
+// MARK: - 栄養素カード（実際の値を表示）
 struct NutritionCard: View {
     @Binding var selectedDate: Date
     @Binding var showNutritionGoal: Bool
     @ObservedObject private var logsManager = MealLogsManager.shared
     @ObservedObject private var profileManager = UserProfileManager.shared
     
-    var nutrients: (protein: Int, fat: Int, carbs: Int) {
-        logsManager.totalNutrients(for: selectedDate)
+    // 詳細栄養素を取得
+    var detailedNutrients: (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
+        logsManager.detailedNutrients(for: selectedDate)
     }
     
     var body: some View {
         Button { showNutritionGoal = true } label: {
             VStack(spacing: 6) {
                 HStack(spacing: 6) {
-                    NutrientCardCompact(current: nutrients.protein, target: profileManager.proteinGoal, color: Color.red.opacity(0.8), icon: "🥩", name: "たんぱく質")
-                    NutrientCardCompact(current: nutrients.fat, target: profileManager.fatGoal, color: Color.blue, icon: "🥑", name: "脂質")
-                    NutrientCardCompact(current: nutrients.carbs, target: profileManager.carbGoal, color: Color.orange.opacity(0.8), icon: "🍚", name: "炭水化物")
+                    NutrientCardCompact(current: detailedNutrients.protein, target: profileManager.proteinGoal, color: Color.red.opacity(0.8), icon: "🥩", name: "たんぱく質")
+                    NutrientCardCompact(current: detailedNutrients.fat, target: profileManager.fatGoal, color: Color.blue, icon: "🥑", name: "脂質")
+                    NutrientCardCompact(current: detailedNutrients.carbs, target: profileManager.carbGoal, color: Color.orange.opacity(0.8), icon: "🍚", name: "炭水化物")
                 }
                 HStack(spacing: 6) {
-                    NutrientCardCompact(current: 0, target: profileManager.sugarGoal, color: .purple, icon: "🍬", name: "糖分")
-                    NutrientCardCompact(current: 0, target: profileManager.fiberGoal, color: Color.green, icon: "🌾", name: "食物繊維")
-                    NutrientCardCompact(current: 0, target: profileManager.sodiumGoal, color: Color(UIColor.systemGray), icon: "🧂", name: "ナトリウム", unit: "mg")
+                    // 糖分、食物繊維、ナトリウムの実際の値を表示
+                    NutrientCardCompact(current: detailedNutrients.sugar, target: profileManager.sugarGoal, color: .purple, icon: "🍬", name: "糖分")
+                    NutrientCardCompact(current: detailedNutrients.fiber, target: profileManager.fiberGoal, color: Color.green, icon: "🌾", name: "食物繊維")
+                    NutrientCardCompact(current: detailedNutrients.sodium, target: profileManager.sodiumGoal, color: Color(UIColor.systemGray), icon: "🧂", name: "ナトリウム", unit: "mg")
                 }
             }
             .padding(.horizontal, 16)
@@ -424,7 +487,10 @@ struct NutrientCardCompact: View {
     let name: String
     var unit: String = "g"
     
-    var progress: Double { min(Double(current) / Double(target), 1.0) }
+    var progress: Double {
+        guard target > 0 else { return 0 }
+        return min(Double(current) / Double(target), 1.0)
+    }
     
     var body: some View {
         VStack(spacing: 4) {
@@ -482,28 +548,24 @@ struct ActivityWaterCard: View {
         Int(Double(steps) * 0.04)
     }
     
-    // ランニング（有酸素）の消費カロリー
     var runningCalories: Int {
         exerciseLogsManager.logs(for: selectedDate)
             .filter { $0.exerciseType == .running }
             .reduce(0) { $0 + $1.caloriesBurned }
     }
     
-    // 無酸素運動（筋トレのみ）の消費カロリー
     var strengthCalories: Int {
         exerciseLogsManager.logs(for: selectedDate)
             .filter { $0.exerciseType == .strength }
             .reduce(0) { $0 + $1.caloriesBurned }
     }
     
-    // その他の運動（表示しないが合計に含む）
     var otherCalories: Int {
         exerciseLogsManager.logs(for: selectedDate)
             .filter { $0.exerciseType != .running && $0.exerciseType != .strength }
             .reduce(0) { $0 + $1.caloriesBurned }
     }
     
-    // 合計消費カロリー（全て含む）
     var totalCaloriesBurned: Int {
         stepsCalories + runningCalories + strengthCalories + otherCalories
     }
@@ -565,9 +627,7 @@ struct ActivityWaterCard: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    // 3項目のみ表示（歩数、ランニング、無酸素）
                     VStack(alignment: .leading, spacing: 4) {
-                        // 歩数
                         HStack(spacing: 4) {
                             Image(systemName: "figure.walk")
                                 .font(.system(size: 12))
@@ -582,7 +642,6 @@ struct ActivityWaterCard: View {
                                 .foregroundColor(.secondary)
                         }
                         
-                        // ランニング
                         HStack(spacing: 4) {
                             Image(systemName: "figure.run")
                                 .font(.system(size: 12))
@@ -597,7 +656,6 @@ struct ActivityWaterCard: View {
                                 .foregroundColor(.secondary)
                         }
                         
-                        // 無酸素運動
                         HStack(spacing: 4) {
                             Image(systemName: "dumbbell.fill")
                                 .font(.system(size: 12))

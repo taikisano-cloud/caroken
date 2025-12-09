@@ -1,57 +1,81 @@
+"""
+Caloken Backend API
+カロ研バックエンドサーバー
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, meals, exercises, weights, ai, stats
-from app.config import get_settings
+from contextlib import asynccontextmanager
+import logging
 
-settings = get_settings()
+from app.routers import chat_router
+
+# ロギング設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """アプリケーションのライフサイクル管理"""
+    logger.info("🚀 Caloken Backend starting...")
+    yield
+    logger.info("👋 Caloken Backend shutting down...")
+
 
 app = FastAPI(
     title="Caloken API",
-    description="カロ研（カロリー研究）アプリのバックエンドAPI",
+    description="カロ研（Caloken）- 健康管理アプリのバックエンドAPI",
     version="1.0.0",
-    docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None,
+    lifespan=lifespan
 )
 
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",      # Next.js開発
-        "https://*.vercel.app",       # Vercel本番
-        "*"                           # iOS開発用（本番では制限する）
-    ],
+    allow_origins=["*"],  # 本番環境では適切に制限する
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ルーター登録
-app.include_router(auth.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(meals.router, prefix="/api")
-app.include_router(exercises.router, prefix="/api")
-app.include_router(weights.router, prefix="/api")
-app.include_router(ai.router, prefix="/api")
-app.include_router(stats.router, prefix="/api")
+# ルーターの登録
+app.include_router(
+    chat_router.router,
+    tags=["Chat & Analysis"]
+)
 
 
 @app.get("/")
 async def root():
     """ヘルスチェック"""
     return {
-        "message": "Caloken API is running 🐱",
-        "version": "1.0.0",
-        "status": "healthy"
+        "status": "healthy",
+        "app": "Caloken API",
+        "version": "1.0.0"
     }
 
 
 @app.get("/health")
 async def health_check():
-    """ヘルスチェック（Railway用）"""
-    return {"status": "ok"}
+    """詳細ヘルスチェック"""
+    return {
+        "status": "healthy",
+        "services": {
+            "api": "running",
+            "gemini": "configured"
+        }
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )

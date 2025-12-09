@@ -28,6 +28,8 @@ struct S46_MealDetailView: View {
     @State private var editedSodium: Double = 0
     
     @State private var editingField: EditingField? = nil
+    @State private var characterComment: String = ""
+    @State private var isLoadingComment: Bool = false
     @FocusState private var focusedField: EditingField?
     @FocusState private var isMealNameFocused: Bool
     
@@ -67,7 +69,11 @@ struct S46_MealDetailView: View {
         .sheet(isPresented: $showDatePicker) {
             MealDatePickerSheet(selectedDate: $selectedDate)
         }
-        .onAppear { loadOriginalData() }
+        .onAppear {
+            loadOriginalData()
+            // APIからコメントを取得（オプション）
+            fetchCharacterComment()
+        }
         .onChange(of: editingField) { oldValue, newValue in
             focusedField = newValue
         }
@@ -147,13 +153,25 @@ struct S46_MealDetailView: View {
                 .fill(Color(UIColor.secondarySystemGroupedBackground))
                 .frame(width: 10, height: 16)
             
-            Text(result.characterComment)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.primary)
-                .padding(10)
-                .background(Color(UIColor.secondarySystemGroupedBackground))
-                .cornerRadius(10)
-                .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+            Group {
+                if isLoadingComment {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("考え中...")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    Text(characterComment.isEmpty ? result.characterComment : characterComment)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding(10)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(10)
+            .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
         }
         .offset(y: 10)
     }
@@ -413,9 +431,9 @@ struct S46_MealDetailView: View {
         editedProtein = result.totalProtein
         editedFat = result.totalFat
         editedCarbs = result.totalCarbs
-        editedSugar = result.totalSugar
-        editedFiber = result.totalFiber
-        editedSodium = result.totalSodium
+        editedSugar = result.totalSugar    // 糖分を読み込み
+        editedFiber = result.totalFiber    // 食物繊維を読み込み
+        editedSodium = result.totalSodium  // ナトリウムを読み込み
         
         currentImage = capturedImage
         
@@ -430,6 +448,36 @@ struct S46_MealDetailView: View {
         }
     }
     
+    private func fetchCharacterComment() {
+        // APIからコメントを取得（高速モード使用）
+        // 既にresult.characterCommentがある場合はスキップ
+        guard result.characterComment.isEmpty || result.characterComment == "美味しそうだにゃ！🐱" else {
+            return
+        }
+        
+        isLoadingComment = true
+        
+        Task {
+            do {
+                let comment = try await NetworkManager.shared.fetchMealComment(
+                    mealName: getMealName(),
+                    calories: editedCalories,
+                    protein: editedProtein,
+                    fat: editedFat,
+                    carbs: editedCarbs
+                )
+                await MainActor.run {
+                    characterComment = comment
+                    isLoadingComment = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingComment = false
+                }
+            }
+        }
+    }
+    
     private func checkIfAlreadySaved() {
         let mealName = getMealName()
         isBookmarked = SavedMealsManager.shared.savedMeals.contains { $0.name == mealName }
@@ -438,6 +486,7 @@ struct S46_MealDetailView: View {
     private func saveToHome() {
         let totalCalories = editedCalories * quantity
         
+        // 栄養素を全て保存（sugar, fiber, sodium含む）
         let mealLog = MealLogEntry(
             id: existingLogId ?? UUID(),
             name: getMealName(),
@@ -445,6 +494,9 @@ struct S46_MealDetailView: View {
             protein: Int(editedProtein * Double(quantity)),
             fat: Int(editedFat * Double(quantity)),
             carbs: Int(editedCarbs * Double(quantity)),
+            sugar: Int(editedSugar * Double(quantity)),    // 糖分を保存
+            fiber: Int(editedFiber * Double(quantity)),    // 食物繊維を保存
+            sodium: Int(editedSodium * Double(quantity)),  // ナトリウムを保存
             emoji: selectEmoji(),
             date: selectedDate,
             image: currentImage
@@ -467,7 +519,7 @@ struct S46_MealDetailView: View {
         dismiss()
     }
     
-    // 画像も含めて保存
+    // 画像も含めて保存（栄養素も含む）
     private func addToSavedMeals() {
         let mealName = getMealName()
         let savedMeal = SavedMeal(
@@ -476,8 +528,11 @@ struct S46_MealDetailView: View {
             protein: editedProtein * Double(quantity),
             fat: editedFat * Double(quantity),
             carbs: editedCarbs * Double(quantity),
+            sugar: editedSugar * Double(quantity),    // 糖分
+            fiber: editedFiber * Double(quantity),    // 食物繊維
+            sodium: editedSodium * Double(quantity),  // ナトリウム
             emoji: selectEmoji(),
-            image: currentImage  // 画像を渡す
+            image: currentImage
         )
         SavedMealsManager.shared.addMeal(savedMeal)
     }
