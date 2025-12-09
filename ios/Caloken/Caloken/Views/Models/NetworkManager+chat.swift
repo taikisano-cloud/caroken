@@ -1,5 +1,5 @@
-// NetworkManager.swift に追加するチャット関連のメソッド
-// 既存のNetworkManagerクラスに以下のメソッドを追加/更新してください
+// NetworkManager+Chat.swift
+// チャット関連のNetworkManager拡張
 
 import Foundation
 
@@ -19,10 +19,9 @@ extension NetworkManager {
         imageBase64: String?,
         chatHistory: [[String: Any]],
         userContext: [String: Any],
-        mode: String = "fast"  // デフォルトは高速モード
+        mode: String = "fast"
     ) async throws -> String {
         
-        // APIエンドポイント
         let endpoint = "\(baseURL)/api/chat"
         
         guard let url = URL(string: endpoint) else {
@@ -33,17 +32,15 @@ extension NetworkManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        // 認証トークンがあれば追加
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        // リクエストボディ
         var body: [String: Any] = [
             "message": message,
             "chat_history": chatHistory,
             "user_context": userContext,
-            "mode": mode  // モードを追加
+            "mode": mode
         ]
         
         if let imageBase64 = imageBase64 {
@@ -52,7 +49,6 @@ extension NetworkManager {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        // リクエスト送信
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -63,7 +59,6 @@ extension NetworkManager {
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
-        // レスポンスをパース
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let responseText = json["response"] as? String else {
             throw NetworkError.decodingError
@@ -130,7 +125,10 @@ extension NetworkManager {
         calories: Int,
         protein: Double,
         fat: Double,
-        carbs: Double
+        carbs: Double,
+        sugar: Double = 0,
+        fiber: Double = 0,
+        sodium: Double = 0
     ) async throws -> String {
         
         let endpoint = "\(baseURL)/api/meal-comment"
@@ -152,7 +150,10 @@ extension NetworkManager {
             "calories": calories,
             "protein": protein,
             "fat": fat,
-            "carbs": carbs
+            "carbs": carbs,
+            "sugar": sugar,
+            "fiber": fiber,
+            "sodium": sodium
         ]
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -173,26 +174,28 @@ extension NetworkManager {
     }
 }
 
-// MARK: - NetworkError
-enum NetworkError: Error {
-    case invalidURL
-    case invalidResponse
-    case serverError(statusCode: Int)
-    case decodingError
-    case noData
-    
-    var localizedDescription: String {
-        switch self {
-        case .invalidURL:
-            return "無効なURLです"
-        case .invalidResponse:
-            return "サーバーからの応答が無効です"
-        case .serverError(let statusCode):
-            return "サーバーエラー: \(statusCode)"
-        case .decodingError:
-            return "データの解析に失敗しました"
-        case .noData:
-            return "データがありません"
-        }
+// ※ NetworkErrorはNetworkManager.swiftで定義済み
+
+// MARK: - HomeAdviceManager互換
+extension NetworkManager {
+    /// HomeAdviceManager互換メソッド
+    func getHomeAdvice(
+        todayCalories: Int,
+        goalCalories: Int,
+        todayProtein: Int,
+        todayFat: Int,
+        todayCarbs: Int,
+        todayMeals: String,
+        mealCount: Int
+    ) async throws -> String {
+        return try await fetchHomeAdvice(
+            todayCalories: todayCalories,
+            goalCalories: goalCalories,
+            todayProtein: todayProtein,
+            todayFat: todayFat,
+            todayCarbs: todayCarbs,
+            todayMeals: todayMeals,
+            mealCount: mealCount
+        )
     }
 }

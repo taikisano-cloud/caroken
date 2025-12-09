@@ -616,14 +616,6 @@ struct CaloChatView: View {
     
     // MARK: - フォールバック応答
     private func generateFallbackResponse(for message: String) -> String {
-        if network.isDebugMode {
-            return "ごめんにゃ😿 サーバーに接続できなかったみたい...もう一度試してほしいにゃ！"
-        }
-        
-        if !network.isLoggedIn {
-            return "ごめんにゃ😿 まだログインしてないみたい...ログインしてからもう一度話しかけてにゃ！"
-        }
-        
         return "ごめんにゃ😿 ちょっと調子が悪いみたい...もう一度試してほしいにゃ！"
     }
 }
