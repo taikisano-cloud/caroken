@@ -12,11 +12,9 @@ settings = get_settings()
 genai.configure(api_key=settings.gemini_api_key)
 
 # モデル設定
-# Flash-8B: 最速・軽量（アドバイス、チャット用）
-model_flash_lite = genai.GenerativeModel('gemini-1.5-flash-8b')
-# Flash: 高速・高品質（画像分析用）  
+# Flash: 高速・高品質（高速モード、画像分析用）  
 model_flash = genai.GenerativeModel('gemini-2.0-flash-exp')
-# Pro: 高精度（複雑な分析用）
+# Pro: 最高精度（思考モード用）
 model_pro = genai.GenerativeModel('gemini-2.5-pro')
 
 
@@ -200,16 +198,51 @@ class GeminiService:
         user_context: Optional[dict] = None,
         image_base64: Optional[str] = None,
         chat_history: Optional[list] = None,
-        mode: str = "fast"  # ✅ モードパラメータを追加
-    ) -> str:
+        mode: str = "fast",
+        user_memories: Optional[list] = None  # ✅ ユーザー記憶
+    ) -> dict:
         """
         カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
-        mode: "fast" = 高速モード（Flash-8B）, "thinking" = 思考モード（Flash）
+        mode: "fast" = 高速モード（Flash）, "thinking" = 思考モード（Pro）
+        Returns: {"response": str, "memory_to_save": Optional[dict]}
         """
-        context = ""
+        from datetime import datetime
+        import pytz
+        
+        # 日本時間を取得
+        jst = pytz.timezone('Asia/Tokyo')
+        now = datetime.now(jst)
+        current_time = now.strftime("%Y年%m月%d日 %H時%M分")
+        hour = now.hour
+        
+        # 時間帯の判定
+        if 5 <= hour < 10:
+            time_period = "朝"
+            greeting_hint = "おはようの挨拶が自然"
+        elif 10 <= hour < 14:
+            time_period = "昼"
+            greeting_hint = "ランチの話題が自然"
+        elif 14 <= hour < 18:
+            time_period = "午後"
+            greeting_hint = "おやつや夕食の準備の話題が自然"
+        elif 18 <= hour < 22:
+            time_period = "夜"
+            greeting_hint = "夕食や1日の振り返りの話題が自然"
+        else:
+            time_period = "深夜"
+            greeting_hint = "夜更かしを心配する、軽い夜食の話題が自然"
+        
+        context = f"\n【現在の時刻】\n{current_time}（{time_period}）\n※{greeting_hint}\n"
+        
+        # ユーザー記憶があれば追加
+        if user_memories and len(user_memories) > 0:
+            context += "\n【覚えていること】\n"
+            for mem in user_memories[-10:]:  # 直近10件
+                context += f"- {mem.get('content', '')}（{mem.get('category', '')}）\n"
+        
         if user_context:
             # 基本情報
-            context = "\n【ユーザー情報】\n"
+            context += "\n【ユーザー情報】\n"
             
             # 身体情報
             if user_context.get('gender'):
@@ -289,6 +322,7 @@ class GeminiService:
 - 絵文字を適度に使う（🐱😊🔥💪🍽️など）
 - 専門的なアドバイスも分かりやすく伝える
 - ユーザーの食事や健康について具体的なアドバイスをする
+- 時間帯に合わせた自然な挨拶や話題を心がける
 
 【重要】
 - ユーザーの情報（性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
@@ -297,6 +331,7 @@ class GeminiService:
 - 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
 - 過去の会話を参照して、一貫性のある返答をする
 - ユーザーの目標（減量/維持/増量）に合わせたアドバイスをする
+- 現在の時刻を意識した返答をする（朝なら「おはよう」、夜なら「お疲れ様」など）
 
 {context}
 {history_text}
@@ -311,23 +346,34 @@ class GeminiService:
             # ✅ モードに応じてモデルを選択
             if image_base64:
                 image_data = base64.b64decode(image_base64)
-                # 画像付きの場合は常にFlashモデル
+                # 画像付きの場合はFlashモデル
                 response = model_flash.generate_content([
                     system_prompt,
                     {"mime_type": "image/jpeg", "data": image_data}
                 ])
             elif mode == "thinking":
-                # 思考モード: Flashモデル（より詳細な回答）
-                response = model_flash.generate_content(system_prompt)
+                # 思考モード: Proモデル（最高精度）
+                response = model_pro.generate_content(system_prompt)
             else:
-                # 高速モード: Flash-8Bモデル（最速）
-                response = model_flash_lite.generate_content(system_prompt)
+                # 高速モード: Flashモデル
+                response = model_flash.generate_content(system_prompt)
             
-            return response.text.strip()
+            response_text = response.text.strip()
+            
+            # ✅ 記憶抽出（バックグラウンドで実行）
+            memory_to_save = await GeminiService.extract_memory(message, response_text)
+            
+            return {
+                "response": response_text,
+                "memory_to_save": memory_to_save
+            }
             
         except Exception as e:
             print(f"Gemini API Error: {e}")
-            return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
+            return {
+                "response": f"ごめんにゃ、{time_period}なのにちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！",
+                "memory_to_save": None
+            }
     
     @staticmethod
     async def generate_advice(
@@ -386,8 +432,8 @@ class GeminiService:
 """
         
         try:
-            # ✅ Flash-Lite モデルを使用（最速・アドバイス生成に最適）
-            response = model_flash_lite.generate_content(prompt)
+            # ✅ Flash モデルを使用
+            response = model_flash.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             print(f"Gemini API Error (advice): {e}")
@@ -397,9 +443,10 @@ class GeminiService:
     async def extract_memory(message: str, response: str) -> Optional[dict]:
         """
         会話から重要な情報を抽出して記憶として保存するか判断
+        期限付きの記憶を生成（誕生日、予定などは期限付き）
         """
         prompt = f"""
-以下の会話から、長期的に覚えておくべき重要な情報があるか判断してください。
+以下の会話から、覚えておくべき重要な情報があるか判断してください。
 
 【ユーザーのメッセージ】
 {message}
@@ -408,39 +455,59 @@ class GeminiService:
 {response}
 
 【抽出すべき情報の例】
-- 食の好み（嫌いな食べ物、アレルギー、好きな料理）
-- 健康目標（ダイエット目標、筋トレ目標）
-- 生活習慣（朝型/夜型、食事時間の傾向）
-- 体の状態（持病、体質）
+- 食の好み（嫌いな食べ物、アレルギー、好きな料理）→ 長期記憶
+- 健康目標（ダイエット目標、筋トレ目標）→ 長期記憶
+- 生活習慣（朝型/夜型、食事時間の傾向）→ 長期記憶
+- 体の状態（持病、体質）→ 長期記憶
+- 予定・イベント（「来週〇〇がある」「誕生日は〇月」など）→ 短期記憶（期限付き）
+- 一時的な状況（「今日は疲れた」「風邪気味」など）→ 短期記憶（1日）
 
 【指示】
 重要な情報があれば以下のJSON形式で返答してください。
 なければ「null」とだけ返答してください。
 
 {{
-    "category": "preference|goal|health|habit",
+    "category": "preference|goal|health|habit|event|temporary",
     "content": "抽出した情報（簡潔に）",
-    "importance": 1-5の数字
+    "importance": 1-5の数字,
+    "expires_in_days": null（永続）または数字（何日後に期限切れ）
 }}
+
+expires_in_days の目安:
+- preference/health/habit: null（永続）
+- goal: null または 90（3ヶ月）
+- event: イベントまでの日数 + 1日
+- temporary: 1（翌日には忘れる）
 """
         
         try:
-            # ✅ Flash-Lite モデルを使用（高速）
-            result = model_flash_lite.generate_content(prompt)
+            # ✅ Flash モデルを使用
+            result = model_flash.generate_content(prompt)
             text = result.text.strip()
             
             if text.lower() == "null" or text == "":
                 return None
             
             # JSONをパース
-            import json
             # ```json などのマークダウンを除去
             if "```" in text:
                 text = text.split("```")[1]
                 if text.startswith("json"):
                     text = text[4:]
             
-            return json.loads(text.strip())
+            memory = json.loads(text.strip())
+            
+            # 有効期限を計算
+            from datetime import datetime, timedelta
+            if memory.get('expires_in_days') is not None:
+                expires_at = datetime.now() + timedelta(days=memory['expires_in_days'])
+                memory['expires_at'] = expires_at.isoformat()
+            else:
+                memory['expires_at'] = None
+            
+            memory['created_at'] = datetime.now().isoformat()
+            
+            return memory
         except Exception as e:
             print(f"Memory extraction error: {e}")
             return None

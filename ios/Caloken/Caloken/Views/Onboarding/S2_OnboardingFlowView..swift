@@ -25,11 +25,14 @@ struct S2_OnboardingFlowView: View {
     @State private var planProgress: Double = 0
     @State private var planCreationPhase: PlanCreationPhase = .notStarted
     
-    // 計算されたプラン
-    @State private var calculatedCalories: Int = 1610
-    @State private var calculatedCarbs: Int = 196
-    @State private var calculatedProtein: Int = 106
-    @State private var calculatedFat: Int = 45
+    // 計算されたプラン（動的に計算）
+    @State private var calculatedCalories: Int = 2000
+    @State private var calculatedCarbs: Int = 250
+    @State private var calculatedProtein: Int = 100
+    @State private var calculatedFat: Int = 55
+    @State private var calculatedSugar: Int = 25
+    @State private var calculatedFiber: Int = 20
+    @State private var calculatedSodium: Int = 2300
     
     // 遷移
     @State private var navigateToLogin: Bool = false
@@ -40,6 +43,106 @@ struct S2_OnboardingFlowView: View {
     
     var progress: Double {
         Double(currentStep) / Double(totalSteps - 1)
+    }
+    
+    // MARK: - 年齢計算
+    private var age: Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let ageComponents = calendar.dateComponents([.year], from: birthDate, to: now)
+        return ageComponents.year ?? 25
+    }
+    
+    // MARK: - 栄養計算
+    private func calculateNutritionPlan() {
+        // 1. 基礎代謝量 (BMR) - Mifflin-St Jeor式
+        let bmr: Double
+        if selectedGender == .male {
+            bmr = 10 * Double(currentWeight) + 6.25 * Double(height) - 5 * Double(age) + 5
+        } else if selectedGender == .female {
+            bmr = 10 * Double(currentWeight) + 6.25 * Double(height) - 5 * Double(age) - 161
+        } else {
+            // その他の場合は中間値
+            let maleBmr = 10 * Double(currentWeight) + 6.25 * Double(height) - 5 * Double(age) + 5
+            let femaleBmr = 10 * Double(currentWeight) + 6.25 * Double(height) - 5 * Double(age) - 161
+            bmr = (maleBmr + femaleBmr) / 2
+        }
+        
+        // 2. 活動係数
+        let activityMultiplier: Double
+        switch selectedExerciseFrequency {
+        case .rarely:
+            activityMultiplier = 1.2  // 座り仕事、ほぼ運動なし
+        case .sometimes:
+            activityMultiplier = 1.55 // 週3-5回の軽い運動
+        case .often:
+            activityMultiplier = 1.725 // 週6-7回の運動
+        case .none:
+            activityMultiplier = 1.4
+        }
+        
+        // 3. TDEE (1日の総消費カロリー)
+        let tdee = bmr * activityMultiplier
+        
+        // 4. 目標に応じたカロリー調整
+        let targetCalories: Double
+        let proteinRatio: Double
+        let fatRatio: Double
+        let carbRatio: Double
+        
+        switch selectedGoal {
+        case .lose:
+            // 減量: -20%（最低1200kcal）
+            targetCalories = max(1200, tdee * 0.80)
+            proteinRatio = 0.30  // 高たんぱく
+            fatRatio = 0.25
+            carbRatio = 0.45
+        case .maintain:
+            // 維持
+            targetCalories = tdee
+            proteinRatio = 0.25
+            fatRatio = 0.25
+            carbRatio = 0.50
+        case .gain:
+            // 増量: +15%
+            targetCalories = tdee * 1.15
+            proteinRatio = 0.25
+            fatRatio = 0.20
+            carbRatio = 0.55
+        case .none:
+            targetCalories = tdee
+            proteinRatio = 0.25
+            fatRatio = 0.25
+            carbRatio = 0.50
+        }
+        
+        // 5. PFCを計算
+        // たんぱく質: 1g = 4kcal
+        // 脂質: 1g = 9kcal
+        // 炭水化物: 1g = 4kcal
+        calculatedCalories = Int(targetCalories)
+        calculatedProtein = Int((targetCalories * proteinRatio) / 4)
+        calculatedFat = Int((targetCalories * fatRatio) / 9)
+        calculatedCarbs = Int((targetCalories * carbRatio) / 4)
+        
+        // 6. その他の栄養素
+        // 糖分: 総カロリーの5-10%（1g = 4kcal）
+        calculatedSugar = Int((targetCalories * 0.05) / 4)
+        
+        // 食物繊維: 1000kcalあたり14g
+        calculatedFiber = Int((targetCalories / 1000) * 14)
+        
+        // ナトリウム: 目標により調整
+        switch selectedGoal {
+        case .lose:
+            calculatedSodium = 2000  // 減量時は控えめ
+        case .maintain:
+            calculatedSodium = 2300
+        case .gain:
+            calculatedSodium = 2500
+        case .none:
+            calculatedSodium = 2300
+        }
     }
     
     private func goToNextStep() {
@@ -110,8 +213,18 @@ struct S2_OnboardingFlowView: View {
                     PlanCreationAnimationView(progress: $planProgress, phase: $planCreationPhase)
                         .transition(.asymmetric(insertion: .move(edge: isGoingForward ? .trailing : .leading), removal: .move(edge: isGoingForward ? .leading : .trailing)))
                 case 9:
-                    PlanDetailView(targetDate: targetDate, targetWeight: targetWeight, calories: calculatedCalories, carbs: calculatedCarbs, protein: calculatedProtein, fat: calculatedFat)
-                        .transition(.asymmetric(insertion: .move(edge: isGoingForward ? .trailing : .leading), removal: .move(edge: isGoingForward ? .leading : .trailing)))
+                    PlanDetailView(
+                        targetDate: targetDate,
+                        targetWeight: targetWeight,
+                        calories: calculatedCalories,
+                        carbs: calculatedCarbs,
+                        protein: calculatedProtein,
+                        fat: calculatedFat,
+                        fiber: calculatedFiber,
+                        sugar: calculatedSugar,
+                        sodium: calculatedSodium
+                    )
+                    .transition(.asymmetric(insertion: .move(edge: isGoingForward ? .trailing : .leading), removal: .move(edge: isGoingForward ? .leading : .trailing)))
                 default:
                     EmptyView()
                 }
@@ -225,6 +338,13 @@ struct S2_OnboardingFlowView: View {
             protein: calculatedProtein,
             fat: calculatedFat
         )
+        
+        // 追加の栄養素も保存
+        profileManager.sugarGoal = calculatedSugar
+        profileManager.fiberGoal = calculatedFiber
+        profileManager.sodiumGoal = calculatedSodium
+        profileManager.saveNutritionGoals()
+        
         profileManager.completeOnboarding()
     }
     
@@ -278,6 +398,9 @@ struct S2_OnboardingFlowView: View {
     }
     
     private func startPlanCreation() {
+        // ✅ 栄養計算を実行
+        calculateNutritionPlan()
+        
         planCreationPhase = .calories
         let phases: [PlanCreationPhase] = [.calories, .carbs, .protein, .fat, .healthScore]
         for (index, phase) in phases.enumerated() {
@@ -677,7 +800,6 @@ struct PlanCreationAnimationView: View {
                 .font(.system(size: 16))
                 .foregroundColor(.gray)
             
-            // プランチェックリスト（ダーク/ライトモード対応）
             VStack(alignment: .leading, spacing: 12) {
                 Text("あなたのプラン")
                     .font(.system(size: 16, weight: .semibold))
@@ -723,8 +845,16 @@ struct PlanCheckItem: View {
 }
 
 struct PlanDetailView: View {
-    let targetDate: Date; let targetWeight: Int; let calories: Int; let carbs: Int; let protein: Int; let fat: Int
-    let fiber: Int = 18; let sugar: Int = 25; let sodium: Int = 2300
+    let targetDate: Date
+    let targetWeight: Int
+    let calories: Int
+    let carbs: Int
+    let protein: Int
+    let fat: Int
+    let fiber: Int
+    let sugar: Int
+    let sodium: Int
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {

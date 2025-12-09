@@ -6,23 +6,9 @@ from app.models.chat import (
     MealAnalysisRequest, DetailedMealAnalysis,
     ChatRequest, ChatResponse, ChatMessageCreate, ChatMessageResponse
 )
-from pydantic import BaseModel
 from datetime import datetime, date
 
 router = APIRouter(prefix="/ai", tags=["AI分析"])
-
-
-# テスト用リクエスト/レスポンス
-class TestChatRequest(BaseModel):
-    message: str
-    image_base64: str | None = None
-    chat_history: list | None = None  # 会話履歴
-    today_meals: str | None = None    # 今日食べたもの
-    user_context: dict | None = None  # ユーザー情報（性別、年齢、目標等）
-
-
-class TestChatResponse(BaseModel):
-    response: str
 
 
 @router.post("/analyze-meal", response_model=DetailedMealAnalysis)
@@ -103,18 +89,51 @@ async def chat_with_calo(
         if profile_response.data:
             goal_calories = profile_response.data.get("daily_calorie_goal", 2000)
         
+        # ユーザーの記憶を取得（期限切れを除く）
+        memories_response = supabase.table("user_memories").select("*").eq(
+            "user_id", current_user["id"]
+        ).execute()
+        
+        user_memories = []
+        if memories_response.data:
+            now = datetime.now().isoformat()
+            for mem in memories_response.data:
+                # 期限切れでないものだけ取得
+                if mem.get("expires_at") is None or mem.get("expires_at") > now:
+                    user_memories.append(mem)
+        
         user_context = {
             "today_calories": today_calories,
             "goal_calories": goal_calories,
             "today_exercise": today_exercise
         }
         
-        # AIレスポンスを生成
-        ai_response = await gemini_service.chat(
+        # AIレスポンスを生成（dictで返ってくる）
+        ai_result = await gemini_service.chat(
             message=request.message,
             user_context=user_context,
-            image_base64=request.image_base64
+            image_base64=request.image_base64,
+            mode=getattr(request, 'mode', 'fast'),
+            user_memories=user_memories
         )
+        
+        ai_response = ai_result.get("response", "")
+        memory_to_save = ai_result.get("memory_to_save")
+        
+        # 記憶を保存（重要度3以上のもの）
+        if memory_to_save and memory_to_save.get("importance", 0) >= 3:
+            try:
+                memory_data = {
+                    "user_id": current_user["id"],
+                    "category": memory_to_save.get("category"),
+                    "content": memory_to_save.get("content"),
+                    "importance": memory_to_save.get("importance"),
+                    "expires_at": memory_to_save.get("expires_at"),
+                    "created_at": memory_to_save.get("created_at")
+                }
+                supabase.table("user_memories").insert(memory_data).execute()
+            except Exception as e:
+                print(f"Memory save error: {e}")
         
         # ユーザーメッセージを保存
         user_msg_data = {
@@ -149,121 +168,6 @@ async def chat_with_calo(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
-
-
-# ============================================
-# テスト用エンドポイント（認証不要）
-# ============================================
-
-@router.post("/chat/test", response_model=TestChatResponse)
-async def chat_test(request: TestChatRequest):
-    """
-    テスト用チャット（認証不要・履歴保存なし）
-    開発/デバッグ用途のみ
-    """
-    try:
-        # ユーザーコンテキストを構築（リクエストから受け取るか、デフォルト値を使用）
-        if request.user_context:
-            user_context = request.user_context
-            # today_mealsがあれば追加
-            if request.today_meals:
-                user_context["today_meals"] = request.today_meals
-        else:
-            # デフォルトのコンテキスト
-            user_context = {
-                "today_calories": 1200,
-                "goal_calories": 2000,
-                "today_exercise": 150,
-                "today_meals": request.today_meals or ""
-            }
-        
-        print(f"📥 Chat request with user context: {user_context}")
-        
-        # AIレスポンスを生成（会話履歴を渡す）
-        ai_response = await gemini_service.chat(
-            message=request.message,
-            user_context=user_context,
-            image_base64=request.image_base64,
-            chat_history=request.chat_history
-        )
-        
-        return TestChatResponse(response=ai_response)
-        
-    except Exception as e:
-        print(f"❌ Chat error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-@router.post("/analyze-meal/test", response_model=DetailedMealAnalysis)
-async def analyze_meal_test(request: MealAnalysisRequest):
-    """
-    テスト用食事分析（認証不要）
-    開発/デバッグ用途のみ
-    """
-    try:
-        if request.image_base64:
-            result = await gemini_service.analyze_meal_image(request.image_base64)
-        elif request.description:
-            result = await gemini_service.analyze_meal_text(request.description)
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either image_base64 or description is required"
-            )
-        
-        return result
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-
-# ============================================
-# ホームアドバイス用エンドポイント（認証不要）
-# ============================================
-
-class HomeAdviceRequest(BaseModel):
-    today_calories: int = 0
-    goal_calories: int = 2000
-    today_protein: int = 0
-    today_fat: int = 0
-    today_carbs: int = 0
-    today_meals: str | None = None
-    meal_count: int = 0
-
-
-class HomeAdviceResponse(BaseModel):
-    advice: str
-
-
-@router.post("/advice/test", response_model=HomeAdviceResponse)
-async def get_home_advice(request: HomeAdviceRequest):
-    """
-    ホーム画面用のアドバイスを取得（認証不要）
-    """
-    try:
-        advice = await gemini_service.generate_advice(
-            today_calories=request.today_calories,
-            goal_calories=request.goal_calories,
-            today_protein=request.today_protein,
-            today_fat=request.today_fat,
-            today_carbs=request.today_carbs,
-            today_meals=request.today_meals or "",
-            meal_count=request.meal_count
-        )
-        
-        return HomeAdviceResponse(advice=advice)
-        
-    except Exception as e:
-        # エラー時はデフォルトメッセージ
-        return HomeAdviceResponse(advice="今日も一緒にがんばろうにゃ！🐱")
 
 
 @router.get("/chat/history")
