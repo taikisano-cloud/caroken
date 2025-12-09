@@ -453,7 +453,7 @@ struct NutritionCard: View {
     @ObservedObject private var profileManager = UserProfileManager.shared
     
     // 詳細栄養素を取得
-    var detailedNutrients: (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
+    private var detailedNutrients: (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
         logsManager.detailedNutrients(for: selectedDate)
     }
     

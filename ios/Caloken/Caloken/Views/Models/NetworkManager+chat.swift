@@ -199,3 +199,80 @@ extension NetworkManager {
         )
     }
 }
+
+// MARK: - 食事分析API
+extension NetworkManager {
+    
+    /// 食事画像を分析
+    func analyzeMeal(imageBase64: String) async throws -> MealAnalysisData {
+        let endpoint = "\(baseURL)/api/analyze-meal"
+        
+        guard let url = URL(string: endpoint) else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "image_base64": imageBase64
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        let decoder = JSONDecoder()
+        let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
+        return apiResponse.analysis
+    }
+    
+    /// 食事テキストを分析
+    func analyzeMeal(description: String) async throws -> MealAnalysisData {
+        let endpoint = "\(baseURL)/api/analyze-meal"
+        
+        guard let url = URL(string: endpoint) else {
+            throw NetworkError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = [
+            "description": description
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw NetworkError.serverError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        let decoder = JSONDecoder()
+        let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
+        return apiResponse.analysis
+    }
+}
+
+// MARK: - API Response Models
+private struct MealAnalysisAPIResponse: Codable {
+    let analysis: MealAnalysisData
+}

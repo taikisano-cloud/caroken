@@ -9,17 +9,36 @@ struct SavedMeal: Identifiable, Codable {
     let protein: Double
     let fat: Double
     let carbs: Double
+    let sugar: Double      // 糖分（g）← 追加
+    let fiber: Double      // 食物繊維（g）← 追加
+    let sodium: Double     // ナトリウム（mg）← 追加
     let emoji: String
     let savedAt: Date
-    let hasImage: Bool  // 画像があるかどうか
+    let hasImage: Bool
     
-    init(id: UUID = UUID(), name: String, calories: Int, protein: Double, fat: Double, carbs: Double, emoji: String = "🍽️", savedAt: Date = Date(), image: UIImage? = nil) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        calories: Int,
+        protein: Double,
+        fat: Double,
+        carbs: Double,
+        sugar: Double = 0,
+        fiber: Double = 0,
+        sodium: Double = 0,
+        emoji: String = "🍽️",
+        savedAt: Date = Date(),
+        image: UIImage? = nil
+    ) {
         self.id = id
         self.name = name
         self.calories = calories
         self.protein = protein
         self.fat = fat
         self.carbs = carbs
+        self.sugar = sugar
+        self.fiber = fiber
+        self.sodium = sodium
         self.emoji = emoji
         self.savedAt = savedAt
         self.hasImage = image != nil
@@ -28,6 +47,29 @@ struct SavedMeal: Identifiable, Codable {
         if let image = image {
             SavedMealImageStorage.shared.saveImage(image, for: id)
         }
+    }
+    
+    // Codable: 後方互換性のためのデコード
+    enum CodingKeys: String, CodingKey {
+        case id, name, calories, protein, fat, carbs, sugar, fiber, sodium
+        case emoji, savedAt, hasImage
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        calories = try container.decode(Int.self, forKey: .calories)
+        protein = try container.decode(Double.self, forKey: .protein)
+        fat = try container.decode(Double.self, forKey: .fat)
+        carbs = try container.decode(Double.self, forKey: .carbs)
+        // 新フィールド: なければ0（後方互換性）
+        sugar = try container.decodeIfPresent(Double.self, forKey: .sugar) ?? 0
+        fiber = try container.decodeIfPresent(Double.self, forKey: .fiber) ?? 0
+        sodium = try container.decodeIfPresent(Double.self, forKey: .sodium) ?? 0
+        emoji = try container.decode(String.self, forKey: .emoji)
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
+        hasImage = try container.decode(Bool.self, forKey: .hasImage)
     }
     
     // 画像を取得
@@ -98,7 +140,9 @@ class SavedMealsManager: ObservableObject {
     
     @Published var savedMeals: [SavedMeal] = []
     
-    private let userDefaultsKey = "savedMeals_v3"  // バージョンアップ（画像対応）
+    // バージョンアップ（sugar/fiber/sodium追加）
+    private let userDefaultsKey = "savedMeals_v4"
+    private let oldUserDefaultsKey = "savedMeals_v3"
     
     private init() {
         loadMeals()
@@ -142,10 +186,23 @@ class SavedMealsManager: ObservableObject {
     }
     
     private func loadMeals() {
+        // 新バージョンのデータを試す
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
            let decoded = try? JSONDecoder().decode([SavedMeal].self, from: data) {
             savedMeals = decoded
             print("📂 保存済み食事を読み込み: \(savedMeals.count)件")
+            return
+        }
+        
+        // 旧バージョンからのマイグレーション
+        if let data = UserDefaults.standard.data(forKey: oldUserDefaultsKey),
+           let decoded = try? JSONDecoder().decode([SavedMeal].self, from: data) {
+            savedMeals = decoded
+            // 新バージョンで保存し直す
+            saveMeals()
+            // 旧データを削除
+            UserDefaults.standard.removeObject(forKey: oldUserDefaultsKey)
+            print("📂 保存済み食事をマイグレーション: \(savedMeals.count)件")
         }
     }
 }

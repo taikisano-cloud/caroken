@@ -1,5 +1,8 @@
 import Foundation
 
+// MARK: - 型エイリアス（互換性のため）
+typealias DetailedMealAnalysis = MealAnalysisData
+
 // MARK: - 食事分析結果
 struct MealAnalysisData: Codable {
     let foodItems: [MealFoodItem]

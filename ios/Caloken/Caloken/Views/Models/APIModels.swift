@@ -159,18 +159,6 @@ struct FoodItem: Decodable, Identifiable {
     let carbs: Double
 }
 
-struct DetailedMealAnalysis: Decodable {
-    let food_items: [FoodItem]
-    let total_calories: Int
-    let total_protein: Double
-    let total_fat: Double
-    let total_carbs: Double
-    let total_sugar: Double
-    let total_fiber: Double
-    let total_sodium: Double
-    let character_comment: String
-}
-
 struct ChatRequest: Encodable {
     let message: String
     let image_base64: String?
