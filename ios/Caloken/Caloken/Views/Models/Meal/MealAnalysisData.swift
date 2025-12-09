@@ -16,6 +16,18 @@ struct MealAnalysisData: Codable {
     let mealImage: String?
     let characterComment: String
     
+    // MARK: - snake_case互換プロパティ（既存コード用）
+    var food_items: [MealFoodItem] { foodItems }
+    var total_calories: Int { totalCalories }
+    var total_protein: Double { totalProtein }
+    var total_fat: Double { totalFat }
+    var total_carbs: Double { totalCarbs }
+    var total_sugar: Double { totalSugar }
+    var total_fiber: Double { totalFiber }
+    var total_sodium: Double { totalSodium }
+    var meal_image: String? { mealImage }
+    var character_comment: String { characterComment }
+    
     enum CodingKeys: String, CodingKey {
         case foodItems = "food_items"
         case totalCalories = "total_calories"
