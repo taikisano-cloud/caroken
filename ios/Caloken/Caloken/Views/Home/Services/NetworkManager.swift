@@ -202,10 +202,14 @@ class NetworkManager: ObservableObject {
     func analyzeMeal(imageBase64: String? = nil, description: String? = nil) async throws -> DetailedMealAnalysis {
         let body = MealAnalysisRequest(image_base64: imageBase64, description: description)
         
-        // デバッグモードならテストエンドポイントを使用
-        let endpoint = isDebugMode ? "/ai/analyze-meal/test" : "/ai/analyze-meal"
+        // 新しい食事分析エンドポイントを使用（認証不要）
+        let endpoint = "/meal/analyze"
         
-        return try await request(endpoint: endpoint, method: "POST", body: body, requiresAuth: !isDebugMode)
+        print("🍽️ Meal Analysis Request:")
+        print("  - Has image: \(imageBase64 != nil)")
+        print("  - Description: \(description ?? "none")")
+        
+        return try await request(endpoint: endpoint, method: "POST", body: body, requiresAuth: false)
     }
     
     func chat(message: String, imageBase64: String? = nil) async throws -> ChatResponse {

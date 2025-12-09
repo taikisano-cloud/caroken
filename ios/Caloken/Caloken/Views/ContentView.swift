@@ -1,43 +1,185 @@
 import SwiftUI
 import Combine
 
-// MARK: - 分析中の状態管理
+// MARK: - 分析中の状態管理（AI API連携版）
 final class AnalyzingManager: ObservableObject {
     static let shared = AnalyzingManager()
     
     @Published var analyzingMealId: UUID?
     @Published var analyzingExerciseId: UUID?
+    @Published var analysisProgress: String = "分析中..."
     
     private var mealTimer: Timer?
     private var exerciseTimer: Timer?
+    private let network = NetworkManager.shared
     
     private init() {}
     
-    // 食事分析開始（写真から）
+    // MARK: - 食事分析開始（写真から）- AI API使用
     func startMealAnalyzing(image: UIImage?, for date: Date) {
         let logId = MealLogsManager.shared.addAnalyzingLog(image: image, for: date)
         analyzingMealId = logId
+        analysisProgress = "画像を解析中..."
         
-        // 2秒後に分析完了
-        mealTimer?.invalidate()
-        mealTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-            self?.completeMealAnalysis(id: logId, fromDescription: nil)
+        // 画像がある場合はAI APIを呼び出す
+        if let image = image {
+            Task {
+                await analyzeMealWithAI(id: logId, image: image)
+            }
+        } else {
+            // 画像がない場合は従来のモック処理
+            mealTimer?.invalidate()
+            mealTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+                let noDesc: String? = nil
+                self?.completeMealAnalysis(id: logId, fromDescription: noDesc)
+            }
         }
     }
     
-    // 食事分析開始（手動入力から）
+    // MARK: - 食事分析開始（手動入力から）- AI API使用
     func startManualMealAnalyzing(description: String, for date: Date) {
         let logId = MealLogsManager.shared.addAnalyzingLog(image: nil, for: date)
         analyzingMealId = logId
+        analysisProgress = "AIが栄養素を計算中..."
         
-        // 2秒後に分析完了
-        mealTimer?.invalidate()
-        mealTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-            self?.completeMealAnalysis(id: logId, fromDescription: description)
+        // AI APIを呼び出す
+        Task {
+            await analyzeMealTextWithAI(id: logId, description: description)
         }
     }
     
-    // 食事を即座に記録（分析中表示なし）
+    // MARK: - AI画像分析
+    private func analyzeMealWithAI(id: UUID, image: UIImage) async {
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            await MainActor.run {
+                let noDesc: String? = nil
+                self.completeMealAnalysis(id: id, fromDescription: noDesc)
+            }
+            return
+        }
+        
+        let base64String = imageData.base64EncodedString()
+        
+        await MainActor.run {
+            self.analysisProgress = "栄養素を計算中..."
+        }
+        
+        do {
+            let result = try await network.analyzeMeal(imageBase64: base64String)
+            await MainActor.run {
+                self.completeMealAnalysisWithAI(id: id, result: result)
+            }
+        } catch {
+            print("❌ AI Image analysis error: \(error)")
+            await MainActor.run {
+                let noDesc: String? = nil
+                self.completeMealAnalysis(id: id, fromDescription: noDesc)
+            }
+        }
+    }
+    
+    // MARK: - AIテキスト分析
+    private func analyzeMealTextWithAI(id: UUID, description: String) async {
+        do {
+            let result = try await network.analyzeMeal(description: description)
+            await MainActor.run {
+                self.completeMealAnalysisWithAI(id: id, result: result)
+            }
+        } catch {
+            print("❌ AI Text analysis error: \(error)")
+            await MainActor.run {
+                self.completeMealAnalysis(id: id, fromDescription: description)
+            }
+        }
+    }
+    
+    // MARK: - AI分析結果で完了
+    private func completeMealAnalysisWithAI(id: UUID, result: DetailedMealAnalysis) {
+        let name: String
+        if result.food_items.count == 1 {
+            name = result.food_items.first?.name ?? "食事"
+        } else if result.food_items.count > 1 {
+            name = result.food_items.prefix(2).map { $0.name }.joined(separator: "と")
+        } else {
+            name = "食事"
+        }
+        
+        MealLogsManager.shared.completeAnalyzing(
+            id: id,
+            name: name,
+            calories: result.total_calories,
+            protein: Int(result.total_protein),
+            fat: Int(result.total_fat),
+            carbs: Int(result.total_carbs),
+            emoji: selectEmoji(for: name)
+        )
+        
+        DispatchQueue.main.async {
+            self.analyzingMealId = nil
+            self.analysisProgress = "分析中..."
+            NotificationCenter.default.post(
+                name: .showHomeToast,
+                object: nil,
+                userInfo: ["message": "\(name)を記録しました", "color": Color.green]
+            )
+        }
+    }
+    
+    // MARK: - モック分析結果で完了（フォールバック用）
+    private func completeMealAnalysis(id: UUID, fromDescription: String?) {
+        let name: String
+        if let desc = fromDescription {
+            name = String(desc.prefix(20))
+        } else {
+            let names = ["分析した料理", "美味しそうな料理", "ヘルシーな食事"]
+            name = names.randomElement() ?? "食事"
+        }
+        let calories = Int.random(in: 300...600)
+        let protein = Int.random(in: 15...35)
+        let fat = Int.random(in: 10...25)
+        let carbs = Int.random(in: 30...60)
+        
+        MealLogsManager.shared.completeAnalyzing(
+            id: id,
+            name: name,
+            calories: calories,
+            protein: protein,
+            fat: fat,
+            carbs: carbs,
+            emoji: "🍽️"
+        )
+        
+        DispatchQueue.main.async {
+            self.analyzingMealId = nil
+            self.analysisProgress = "分析中..."
+            NotificationCenter.default.post(
+                name: .showHomeToast,
+                object: nil,
+                userInfo: ["message": "食事を記録しました（概算）", "color": Color.orange]
+            )
+        }
+    }
+    
+    // MARK: - 絵文字選択
+    private func selectEmoji(for name: String) -> String {
+        let lowercased = name.lowercased()
+        if lowercased.contains("ラーメン") || lowercased.contains("麺") { return "🍜" }
+        if lowercased.contains("ご飯") || lowercased.contains("米") || lowercased.contains("丼") { return "🍚" }
+        if lowercased.contains("パン") { return "🍞" }
+        if lowercased.contains("サラダ") { return "🥗" }
+        if lowercased.contains("肉") || lowercased.contains("ステーキ") { return "🥩" }
+        if lowercased.contains("魚") || lowercased.contains("寿司") { return "🍣" }
+        if lowercased.contains("卵") { return "🍳" }
+        if lowercased.contains("カレー") { return "🍛" }
+        if lowercased.contains("ピザ") { return "🍕" }
+        if lowercased.contains("ハンバーガー") { return "🍔" }
+        if lowercased.contains("パスタ") { return "🍝" }
+        if lowercased.contains("コーヒー") { return "☕" }
+        if lowercased.contains("ケーキ") || lowercased.contains("スイーツ") { return "🍰" }
+        return "🍽️"
+    }
+    
+    // MARK: - 食事を即座に記録（分析中表示なし）
     func saveMealInstantly(name: String, calories: Int, protein: Int = 0, fat: Int = 0, carbs: Int = 0, for date: Date) {
         let mealLog = MealLogEntry(
             name: name,
@@ -60,7 +202,7 @@ final class AnalyzingManager: ObservableObject {
         }
     }
     
-    // 運動を即座に記録（分析中表示なし）
+    // MARK: - 運動を即座に記録（分析中表示なし）
     func saveExerciseInstantly(name: String, duration: Int, caloriesBurned: Int, exerciseType: ExerciseType = .manual) {
         let exerciseLog = ExerciseLogEntry(
             name: name,
@@ -80,7 +222,7 @@ final class AnalyzingManager: ObservableObject {
         }
     }
     
-    // 運動分析開始
+    // MARK: - 運動分析開始
     func startExerciseAnalyzing(description: String, duration: Int) {
         let logId = ExerciseLogsManager.shared.addAnalyzingLog(
             name: description,
@@ -93,42 +235,6 @@ final class AnalyzingManager: ObservableObject {
         exerciseTimer?.invalidate()
         exerciseTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
             self?.completeExerciseAnalysis(id: logId, description: description, duration: duration)
-        }
-    }
-    
-    private func completeMealAnalysis(id: UUID, fromDescription: String?) {
-        // モック分析結果
-        let name: String
-        if let desc = fromDescription {
-            // 手動入力からの場合は入力内容を使用
-            name = String(desc.prefix(20))
-        } else {
-            // 写真からの場合はランダム
-            let names = ["分析した料理", "美味しそうな料理", "ヘルシーな食事"]
-            name = names.randomElement() ?? "食事"
-        }
-        let calories = Int.random(in: 300...600)
-        let protein = Int.random(in: 15...35)
-        let fat = Int.random(in: 10...25)
-        let carbs = Int.random(in: 30...60)
-        
-        MealLogsManager.shared.completeAnalyzing(
-            id: id,
-            name: name,
-            calories: calories,
-            protein: protein,
-            fat: fat,
-            carbs: carbs,
-            emoji: "🍽️"
-        )
-        
-        DispatchQueue.main.async {
-            self.analyzingMealId = nil
-            NotificationCenter.default.post(
-                name: .showHomeToast,
-                object: nil,
-                userInfo: ["message": "食事を記録しました", "color": Color.green]
-            )
         }
     }
     
@@ -166,6 +272,7 @@ final class AnalyzingManager: ObservableObject {
         analyzingExerciseId = nil
     }
 }
+
 
 // MARK: - ContentView
 struct ContentView: View {
@@ -237,27 +344,24 @@ struct ContentView: View {
             handleToastNotification(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: .dismissAllMealScreens)) { _ in
-            // 全ての食事関連画面を閉じてホームに戻る
             navigateToCamera = false
             navigateToManualRecord = false
             navigateToSavedMeals = false
             showRecordMenu = false
         }
         .onReceive(NotificationCenter.default.publisher(for: .dismissAllExerciseScreens)) { _ in
-            // 全ての運動関連画面を閉じてホームに戻る
             navigateToExerciseMenu = false
             showRecordMenu = false
         }
         .onReceive(NotificationCenter.default.publisher(for: .dismissAllWeightScreens)) { _ in
-            // 全ての体重関連画面を閉じてホームに戻る
             navigateToWeightRecord = false
             showRecordMenu = false
         }
-        .onChange(of: navigateToCamera) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToExerciseMenu) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToManualRecord) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToSavedMeals) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToWeightRecord) { if $0 { showRecordMenu = false } }
+        .onChange(of: navigateToCamera) { _, newValue in if newValue { showRecordMenu = false } }
+        .onChange(of: navigateToExerciseMenu) { _, newValue in if newValue { showRecordMenu = false } }
+        .onChange(of: navigateToManualRecord) { _, newValue in if newValue { showRecordMenu = false } }
+        .onChange(of: navigateToSavedMeals) { _, newValue in if newValue { showRecordMenu = false } }
+        .onChange(of: navigateToWeightRecord) { _, newValue in if newValue { showRecordMenu = false } }
     }
     
     private var mainContent: some View {
