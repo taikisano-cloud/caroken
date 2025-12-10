@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from functools import lru_cache
 
 
@@ -7,7 +8,7 @@ class Settings(BaseSettings):
     
     # Supabase
     supabase_url: str
-    supabase_key: str  # anon key (環境変数: SUPABASE_KEY)
+    supabase_key: str = Field(validation_alias="SUPABASE_ANON_KEY")  # anon key
     supabase_service_role_key: str
     
     # Gemini AI
