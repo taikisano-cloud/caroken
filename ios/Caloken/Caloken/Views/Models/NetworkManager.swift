@@ -4,7 +4,7 @@ import Foundation
 class NetworkManager {
     static let shared = NetworkManager()
     
-    let baseURL = "https://caloken-backend-production.up.railway.app/api"
+    let baseURL = "https://caroken-production.up.railway.app/api"
     
     private init() {}
 }

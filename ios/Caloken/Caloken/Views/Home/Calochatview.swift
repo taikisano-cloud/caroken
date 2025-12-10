@@ -3,6 +3,7 @@ import PhotosUI
 import Combine
 import Speech
 import AVFoundation
+import SafariServices  // ✅ 追加
 
 // MARK: - チャットメッセージマネージャー（日毎管理・画像対応）
 final class ChatMessagesManager: ObservableObject {
@@ -170,8 +171,6 @@ struct CaloChatView: View {
             speechRecognizer.requestAuthorization()
         }
         .onDisappear {
-            // ✅ チャット処理はバックグラウンドでも継続（キャンセルしない）
-            // typingTask?.cancel()
             speechRecognizer.stopRecording()
         }
     }
@@ -416,14 +415,12 @@ struct CaloChatView: View {
     // MARK: - 音声入力トグル
     private func toggleRecording() {
         if isRecording {
-            // 録音停止
             speechRecognizer.stopRecording()
             if !speechRecognizer.transcript.isEmpty {
                 messageText = speechRecognizer.transcript
             }
             isRecording = false
         } else {
-            // 録音開始
             speechRecognizer.transcript = ""
             speechRecognizer.startRecording()
             isRecording = true
@@ -476,7 +473,7 @@ struct CaloChatView: View {
                     imageBase64: imageBase64,
                     chatHistory: chatHistory,
                     userContext: userContext,
-                    mode: chatMode  // ✅ モード切り替えを反映
+                    mode: chatMode
                 )
                 
                 if !Task.isCancelled {
@@ -582,11 +579,9 @@ class SpeechRecognizer: ObservableObject {
     func startRecording() {
         guard isAuthorized else { return }
         
-        // 既存のタスクをキャンセル
         recognitionTask?.cancel()
         recognitionTask = nil
         
-        // オーディオセッション設定
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -642,7 +637,7 @@ class SpeechRecognizer: ObservableObject {
     }
 }
 
-// MARK: - タイピングインジケーター（シンプル - ... のみ）
+// MARK: - タイピングインジケーター
 struct TypingIndicator: View {
     @State private var dotCount = 0
     
@@ -668,7 +663,6 @@ struct TypingIndicator: View {
                     .frame(width: 10, height: 14)
                     .offset(y: 12)
                 
-                // シンプルな ... 表示のみ
                 HStack(spacing: 6) {
                     ForEach(0..<3, id: \.self) { index in
                         Circle()
@@ -773,15 +767,39 @@ struct ChatBubble: View {
     }
 }
 
-// MARK: - URLをタップ可能なテキストビュー
+// MARK: - SafariViewController（アプリ内ブラウザ）
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let config = SFSafariViewController.Configuration()
+        config.entersReaderIfAvailable = false
+        let safariVC = SFSafariViewController(url: url, configuration: config)
+        safariVC.preferredControlTintColor = UIColor.systemOrange
+        return safariVC
+    }
+    
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+// MARK: - URLラッパー（Identifiable対応）
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+// MARK: - URLをタップ可能なテキストビュー（アプリ内ブラウザ対応）
 struct LinkedTextView: View {
     let text: String
+    @State private var selectedURL: IdentifiableURL?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(parseTextWithLinks(text).enumerated()), id: \.offset) { _, element in
                 if element.isLink, let url = URL(string: element.text) {
-                    Link(destination: url) {
+                    Button {
+                        selectedURL = IdentifiableURL(url: url)
+                    } label: {
                         Text(element.text)
                             .font(.system(size: 14))
                             .foregroundColor(.blue)
@@ -796,12 +814,13 @@ struct LinkedTextView: View {
                 }
             }
         }
+        .sheet(item: $selectedURL) { item in
+            SafariView(url: item.url)
+        }
     }
     
     private func parseTextWithLinks(_ text: String) -> [TextElement] {
         var elements: [TextElement] = []
-        
-        // URLパターン
         let urlPattern = #"https?://[^\s\u3000\n]+"#
         
         guard let regex = try? NSRegularExpression(pattern: urlPattern, options: []) else {
@@ -814,7 +833,6 @@ struct LinkedTextView: View {
         var lastEnd = 0
         
         for result in results {
-            // URL前のテキスト
             if result.range.location > lastEnd {
                 let beforeText = nsString.substring(with: NSRange(location: lastEnd, length: result.range.location - lastEnd))
                 let trimmed = beforeText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -823,14 +841,12 @@ struct LinkedTextView: View {
                 }
             }
             
-            // URL
             let urlText = nsString.substring(with: result.range)
             elements.append(TextElement(text: urlText, isLink: true))
             
             lastEnd = result.range.location + result.range.length
         }
         
-        // URL後のテキスト
         if lastEnd < nsString.length {
             let afterText = nsString.substring(from: lastEnd)
             let trimmed = afterText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -839,7 +855,6 @@ struct LinkedTextView: View {
             }
         }
         
-        // URLがない場合
         if elements.isEmpty {
             elements.append(TextElement(text: text, isLink: false))
         }

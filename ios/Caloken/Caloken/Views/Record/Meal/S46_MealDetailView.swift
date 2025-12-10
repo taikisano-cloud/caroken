@@ -451,6 +451,22 @@ struct S46_MealDetailView: View {
             selectedDate = existingDate
         }
         
+        // ✅ 既存のログから数量を復元
+        if let logId = existingLogId,
+           let existingLog = MealLogsManager.shared.getLog(by: logId) {
+            quantity = existingLog.quantity
+            // 1個あたりの値に戻す（保存時にquantity掛けたものが入っている場合）
+            if existingLog.quantity > 1 {
+                editedCalories = existingLog.calories
+                editedProtein = Double(existingLog.protein)
+                editedFat = Double(existingLog.fat)
+                editedCarbs = Double(existingLog.carbs)
+                editedSugar = Double(existingLog.sugar)
+                editedFiber = Double(existingLog.fiber)
+                editedSodium = Double(existingLog.sodium)
+            }
+        }
+        
         if isEditMode {
             checkIfAlreadySaved()
         } else {
@@ -495,21 +511,22 @@ struct S46_MealDetailView: View {
     }
     
     private func saveToHome() {
-        let totalCalories = editedCalories * quantity
-        
+        // ✅ 1個あたりの値を保存（quantityは別で保存）
         let mealLog = MealLogEntry(
             id: existingLogId ?? UUID(),
             name: getMealName(),
-            calories: totalCalories,
-            protein: Int(editedProtein * Double(quantity)),
-            fat: Int(editedFat * Double(quantity)),
-            carbs: Int(editedCarbs * Double(quantity)),
-            sugar: Int(editedSugar * Double(quantity)),
-            fiber: Int(editedFiber * Double(quantity)),
-            sodium: Int(editedSodium * Double(quantity)),
+            calories: editedCalories,           // 1個あたり
+            protein: Int(editedProtein),        // 1個あたり
+            fat: Int(editedFat),                // 1個あたり
+            carbs: Int(editedCarbs),            // 1個あたり
+            sugar: Int(editedSugar),            // 1個あたり
+            fiber: Int(editedFiber),            // 1個あたり
+            sodium: Int(editedSodium),          // 1個あたり
             emoji: selectEmoji(),
             date: selectedDate,
-            image: currentImage?.jpegData(compressionQuality: 0.7)  // ✅ UIImage→Data変換
+            time: selectedDate,
+            image: currentImage?.jpegData(compressionQuality: 0.7),
+            quantity: quantity                   // ✅ 数量を保存
         )
         
         if isEditMode {

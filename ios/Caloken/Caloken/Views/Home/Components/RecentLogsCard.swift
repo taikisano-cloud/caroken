@@ -207,21 +207,27 @@ struct CompactMealLogCard: View {
                     } else {
                         // カロリー
                         HStack(spacing: 4) {
-                            Text("\(log.calories)")
+                            Text("\(log.totalCalories)")  // ✅ quantity掛けた合計値
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(.primary)
                             Text("kcal")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.secondary)
+                            
+                            // ✅ 数量が2以上なら表示
+                            if log.quantity > 1 {
+                                Text("(\(log.quantity)個)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                        
-                        // 栄養素（横並び）
+
+                        // 栄養素部分
                         HStack(spacing: 12) {
-                            CompactNutrientBadge(icon: "🥩", value: log.protein, unit: "g", color: .red)
-                            CompactNutrientBadge(icon: "🥑", value: log.fat, unit: "g", color: .blue)
-                            CompactNutrientBadge(icon: "🍚", value: log.carbs, unit: "g", color: .orange)
-                        }
-                    }
+                            CompactNutrientBadge(icon: "🥩", value: log.totalProtein, unit: "g", color: .red)
+                            CompactNutrientBadge(icon: "🥑", value: log.totalFat, unit: "g", color: .blue)
+                            CompactNutrientBadge(icon: "🍚", value: log.totalCarbs, unit: "g", color: .orange)
+                        }                    }
                 }
             }
             .padding(12)

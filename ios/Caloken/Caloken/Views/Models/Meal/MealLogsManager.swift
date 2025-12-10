@@ -5,28 +5,36 @@ import Combine
 struct MealLogEntry: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var name: String
-    var calories: Int
-    var protein: Int
-    var fat: Int
-    var carbs: Int
-    var sugar: Int          // ✅ 糖質
-    var fiber: Int          // ✅ 食物繊維
-    var sodium: Int         // ✅ ナトリウム(mg)
+    var calories: Int           // 1個あたりのカロリー
+    var protein: Int            // 1個あたり
+    var fat: Int                // 1個あたり
+    var carbs: Int              // 1個あたり
+    var sugar: Int              // 1個あたり
+    var fiber: Int              // 1個あたり
+    var sodium: Int             // 1個あたり(mg)
     var emoji: String
     var date: Date
     var time: Date
     var image: Data?
+    var quantity: Int           // ✅ 数量
     var isAnalyzing: Bool
-    var isAnalyzingError: Bool  // ✅ 追加
-    var hasTimedOut: Bool       // ✅ 追加
-    var analysisProgress: Int   // ✅ 分析進捗（0-100%）
+    var isAnalyzingError: Bool
+    var hasTimedOut: Bool
+    var analysisProgress: Int
+    
+    // ✅ 合計値を計算するプロパティ
+    var totalCalories: Int { calories * quantity }
+    var totalProtein: Int { protein * quantity }
+    var totalFat: Int { fat * quantity }
+    var totalCarbs: Int { carbs * quantity }
+    var totalSugar: Int { sugar * quantity }
+    var totalFiber: Int { fiber * quantity }
+    var totalSodium: Int { sodium * quantity }
     
     // ✅ iconはemojiを返す（互換性のため）
-    var icon: String {
-        emoji
-    }
+    var icon: String { emoji }
     
-    // ✅ UIImage取得用（Data→UIImage変換）
+    // ✅ UIImage取得用
     var uiImage: UIImage? {
         guard let data = image else { return nil }
         return UIImage(data: data)
@@ -39,7 +47,7 @@ struct MealLogEntry: Identifiable, Codable, Equatable {
         return formatter.string(from: time)
     }
     
-    // ✅ 後方互換性のあるイニシャライザ
+    // ✅ イニシャライザ
     init(
         id: UUID = UUID(),
         name: String = "",
@@ -54,6 +62,7 @@ struct MealLogEntry: Identifiable, Codable, Equatable {
         date: Date = Date(),
         time: Date? = nil,
         image: Data? = nil,
+        quantity: Int = 1,
         isAnalyzing: Bool = false,
         isAnalyzingError: Bool = false,
         hasTimedOut: Bool = false,
@@ -72,6 +81,7 @@ struct MealLogEntry: Identifiable, Codable, Equatable {
         self.date = date
         self.time = time ?? date
         self.image = image
+        self.quantity = quantity
         self.isAnalyzing = isAnalyzing
         self.isAnalyzingError = isAnalyzingError
         self.hasTimedOut = hasTimedOut
@@ -94,6 +104,7 @@ struct MealLogEntry: Identifiable, Codable, Equatable {
         date = try container.decode(Date.self, forKey: .date)
         time = try container.decodeIfPresent(Date.self, forKey: .time) ?? date
         image = try container.decodeIfPresent(Data.self, forKey: .image)
+        quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1  // ✅ 旧データは1
         isAnalyzing = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzing) ?? false
         isAnalyzingError = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzingError) ?? false
         hasTimedOut = try container.decodeIfPresent(Bool.self, forKey: .hasTimedOut) ?? false
@@ -120,6 +131,11 @@ final class MealLogsManager: ObservableObject {
             .sorted { $0.time > $1.time }
     }
     
+    // MARK: - IDでログ取得
+    func getLog(by id: UUID) -> MealLogEntry? {
+        return allLogs.first { $0.id == id }
+    }
+    
     // MARK: - ログ追加
     func addLog(_ log: MealLogEntry) {
         allLogs.append(log)
@@ -143,6 +159,7 @@ final class MealLogsManager: ObservableObject {
             date: date,
             time: Date(),
             image: imageData,
+            quantity: 1,
             isAnalyzing: true
         )
         allLogs.append(log)
@@ -150,7 +167,7 @@ final class MealLogsManager: ObservableObject {
         return log.id
     }
     
-    // MARK: - 分析完了 ✅ sugar/fiber/sodium対応
+    // MARK: - 分析完了
     func completeAnalyzing(
         id: UUID,
         name: String,
@@ -184,7 +201,6 @@ final class MealLogsManager: ObservableObject {
     func updateAnalysisProgress(id: UUID, progress: Int) {
         if let index = allLogs.firstIndex(where: { $0.id == id }) {
             allLogs[index].analysisProgress = min(max(progress, 0), 100)
-            // saveLogs()は頻繁に呼ばないように
         }
     }
     
@@ -218,59 +234,59 @@ final class MealLogsManager: ObservableObject {
         }
     }
     
-    // MARK: - 今日の合計
+    // MARK: - 今日の合計（quantity考慮）
     func todayTotals() -> (calories: Int, protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
         let todayLogs = logs(for: Date()).filter { !$0.isAnalyzing }
         return (
-            calories: todayLogs.reduce(0) { $0 + $1.calories },
-            protein: todayLogs.reduce(0) { $0 + $1.protein },
-            fat: todayLogs.reduce(0) { $0 + $1.fat },
-            carbs: todayLogs.reduce(0) { $0 + $1.carbs },
-            sugar: todayLogs.reduce(0) { $0 + $1.sugar },
-            fiber: todayLogs.reduce(0) { $0 + $1.fiber },
-            sodium: todayLogs.reduce(0) { $0 + $1.sodium }
+            calories: todayLogs.reduce(0) { $0 + $1.totalCalories },
+            protein: todayLogs.reduce(0) { $0 + $1.totalProtein },
+            fat: todayLogs.reduce(0) { $0 + $1.totalFat },
+            carbs: todayLogs.reduce(0) { $0 + $1.totalCarbs },
+            sugar: todayLogs.reduce(0) { $0 + $1.totalSugar },
+            fiber: todayLogs.reduce(0) { $0 + $1.totalFiber },
+            sodium: todayLogs.reduce(0) { $0 + $1.totalSodium }
         )
     }
     
-    // MARK: - 特定日の合計
+    // MARK: - 特定日の合計（quantity考慮）
     func totals(for date: Date) -> (calories: Int, protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
         let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
         return (
-            calories: dateLogs.reduce(0) { $0 + $1.calories },
-            protein: dateLogs.reduce(0) { $0 + $1.protein },
-            fat: dateLogs.reduce(0) { $0 + $1.fat },
-            carbs: dateLogs.reduce(0) { $0 + $1.carbs },
-            sugar: dateLogs.reduce(0) { $0 + $1.sugar },
-            fiber: dateLogs.reduce(0) { $0 + $1.fiber },
-            sodium: dateLogs.reduce(0) { $0 + $1.sodium }
+            calories: dateLogs.reduce(0) { $0 + $1.totalCalories },
+            protein: dateLogs.reduce(0) { $0 + $1.totalProtein },
+            fat: dateLogs.reduce(0) { $0 + $1.totalFat },
+            carbs: dateLogs.reduce(0) { $0 + $1.totalCarbs },
+            sugar: dateLogs.reduce(0) { $0 + $1.totalSugar },
+            fiber: dateLogs.reduce(0) { $0 + $1.totalFiber },
+            sodium: dateLogs.reduce(0) { $0 + $1.totalSodium }
         )
     }
     
-    // MARK: - 特定日のカロリー合計
+    // MARK: - 特定日のカロリー合計（quantity考慮）
     func totalCalories(for date: Date) -> Int {
-        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.calories }
+        logs(for: date).filter { !$0.isAnalyzing }.reduce(0) { $0 + $1.totalCalories }
     }
     
-    // MARK: - 特定日の栄養素合計（基本）
+    // MARK: - 特定日の栄養素合計（quantity考慮）
     func totalNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int) {
         let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
         return (
-            protein: dateLogs.reduce(0) { $0 + $1.protein },
-            fat: dateLogs.reduce(0) { $0 + $1.fat },
-            carbs: dateLogs.reduce(0) { $0 + $1.carbs }
+            protein: dateLogs.reduce(0) { $0 + $1.totalProtein },
+            fat: dateLogs.reduce(0) { $0 + $1.totalFat },
+            carbs: dateLogs.reduce(0) { $0 + $1.totalCarbs }
         )
     }
     
-    // MARK: - 特定日の詳細栄養素合計
+    // MARK: - 特定日の詳細栄養素合計（quantity考慮）
     func detailedNutrients(for date: Date) -> (protein: Int, fat: Int, carbs: Int, sugar: Int, fiber: Int, sodium: Int) {
         let dateLogs = logs(for: date).filter { !$0.isAnalyzing }
         return (
-            protein: dateLogs.reduce(0) { $0 + $1.protein },
-            fat: dateLogs.reduce(0) { $0 + $1.fat },
-            carbs: dateLogs.reduce(0) { $0 + $1.carbs },
-            sugar: dateLogs.reduce(0) { $0 + $1.sugar },
-            fiber: dateLogs.reduce(0) { $0 + $1.fiber },
-            sodium: dateLogs.reduce(0) { $0 + $1.sodium }
+            protein: dateLogs.reduce(0) { $0 + $1.totalProtein },
+            fat: dateLogs.reduce(0) { $0 + $1.totalFat },
+            carbs: dateLogs.reduce(0) { $0 + $1.totalCarbs },
+            sugar: dateLogs.reduce(0) { $0 + $1.totalSugar },
+            fiber: dateLogs.reduce(0) { $0 + $1.totalFiber },
+            sodium: dateLogs.reduce(0) { $0 + $1.totalSodium }
         )
     }
     
@@ -290,5 +306,5 @@ extension Notification.Name {
     static let dismissAllExerciseScreens = Notification.Name("dismissAllExerciseScreens")
     static let dismissAllWeightScreens = Notification.Name("dismissAllWeightScreens")
     static let returnToManualEntry = Notification.Name("returnToManualEntry")
-    static let weightLogAdded = Notification.Name("weightLogAdded")  // ✅ 追加
+    static let weightLogAdded = Notification.Name("weightLogAdded")
 }
