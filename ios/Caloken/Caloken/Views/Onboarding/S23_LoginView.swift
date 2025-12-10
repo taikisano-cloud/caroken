@@ -395,6 +395,9 @@ struct S23_LoginView: View {
             showError = true
         case .notInteractive:
             print("   Not interactive")
+        case .matchedExcludedCredential:
+            errorMessage = "この資格情報は使用できません。"
+            showError = true
         @unknown default:
             errorMessage = "予期しないエラーが発生しました。"
             showError = true

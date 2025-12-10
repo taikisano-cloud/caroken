@@ -335,15 +335,17 @@ class AuthService: NSObject, ObservableObject {
 // MARK: - ASWebAuthenticationPresentationContextProviding
 extension AuthService: ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        // メインウィンドウを返す
+        // ✅ iOS 26対応：windowSceneから取得
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = scene.windows.first else {
-            return ASPresentationAnchor()
+            // フォールバック：windowSceneから新しいウィンドウを作成
+            let windowScene = UIApplication.shared.connectedScenes.first as! UIWindowScene
+            let window = UIWindow(windowScene: windowScene)
+            return window
         }
         return window
     }
 }
-
 // MARK: - Auth User
 struct AuthUser {
     let id: String

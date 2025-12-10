@@ -775,7 +775,6 @@ struct SafariView: UIViewControllerRepresentable {
         let config = SFSafariViewController.Configuration()
         config.entersReaderIfAvailable = false
         let safariVC = SFSafariViewController(url: url, configuration: config)
-        safariVC.preferredControlTintColor = UIColor.systemOrange
         return safariVC
     }
     

@@ -287,8 +287,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "カロ研";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "食事を撮影して栄養素を分析します";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "歩数や運動データを記録するために使用します";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "歩数や運動データを記録するために使用します";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";
@@ -343,8 +343,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "カロ研";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "食事を撮影して栄養素を分析します";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "歩数や運動データを記録するために使用します";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "歩数や運動データを記録するために使用します";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";

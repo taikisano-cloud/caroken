@@ -108,11 +108,21 @@ struct MainTabView: View {
             }
         }
         // メニュー閉じる
-        .onChange(of: navigateToCamera) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToExerciseMenu) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToManualRecord) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToSavedMeals) { if $0 { showRecordMenu = false } }
-        .onChange(of: navigateToWeightRecord) { if $0 { showRecordMenu = false } }
+        .onChange(of: navigateToCamera) { _, newValue in
+            if newValue { showRecordMenu = false }
+        }
+        .onChange(of: navigateToExerciseMenu) { _, newValue in
+            if newValue { showRecordMenu = false }
+        }
+        .onChange(of: navigateToManualRecord) { _, newValue in
+            if newValue { showRecordMenu = false }
+        }
+        .onChange(of: navigateToSavedMeals) { _, newValue in
+            if newValue { showRecordMenu = false }
+        }
+        .onChange(of: navigateToWeightRecord) { _, newValue in
+            if newValue { showRecordMenu = false }
+        }
         // 全画面を閉じる通知を受信
         .onReceive(NotificationCenter.default.publisher(for: .dismissAllMealScreens)) { _ in
             showRecordMenu = false

@@ -279,7 +279,11 @@ struct CompactMealLogCard: View {
                         let velocity = value.predictedEndTranslation.width
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             if velocity < -500 || offset < -150 {
-                                offset = -UIScreen.main.bounds.width
+                                // ❌ 古い書き方
+                                // offset = -UIScreen.main.bounds.width
+                                
+                                // ✅ 新しい書き方（固定値で十分）
+                                offset = -500
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     onDelete()
                                 }
@@ -512,7 +516,11 @@ struct CompactExerciseLogCard: View {
                         let velocity = value.predictedEndTranslation.width
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             if velocity < -500 || offset < -150 {
-                                offset = -UIScreen.main.bounds.width
+                                // ❌ 古い書き方
+                                // offset = -UIScreen.main.bounds.width
+                                
+                                // ✅ 新しい書き方（固定値で十分）
+                                offset = -500
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     onDelete()
                                 }
@@ -523,6 +531,7 @@ struct CompactExerciseLogCard: View {
                             }
                         }
                     }
+
             )
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
