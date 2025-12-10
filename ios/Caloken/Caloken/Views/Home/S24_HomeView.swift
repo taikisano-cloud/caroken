@@ -207,7 +207,7 @@ struct MetricsTabView: View {
     }
 }
 
-// MARK: - カロリー + アドバイスカード（食事記録時のみ更新）
+// MARK: - カロリー + アドバイスカード（食事記録時に更新）
 struct CalorieWithAdviceCard: View {
     @Binding var selectedDate: Date
     @Binding var showNutritionGoal: Bool
@@ -218,25 +218,13 @@ struct CalorieWithAdviceCard: View {
     
     @State private var adviceText: String = "今日も一緒にがんばろうにゃ！🐱"
     @State private var isLoadingAdvice: Bool = false
-    @State private var hasLoadedInitialAdvice: Bool = false  // ✅ 初回読み込みフラグ
-    @State private var lastMealLogHash: Int = 0  // ✅ 食事ログのハッシュで変更を検出
+    @State private var lastMealCount: Int = 0  // ✅ 食事数を追跡
     
     var baseTarget: Int { profileManager.calorieGoal }
     var exerciseBonus: Int { exerciseLogsManager.totalCaloriesBurned(for: selectedDate) }
     var target: Int { baseTarget + exerciseBonus }
     var current: Int { logsManager.totalCalories(for: selectedDate) }
-    
-    // 食事ログのハッシュ値を計算（変更検出用）
-    private var currentMealLogHash: Int {
-        let logs = logsManager.logs(for: selectedDate)
-        var hasher = Hasher()
-        hasher.combine(logs.count)
-        for log in logs {
-            hasher.combine(log.id)
-            hasher.combine(log.calories)
-        }
-        return hasher.finalize()
-    }
+    var mealCount: Int { logsManager.logs(for: selectedDate).count }
     
     var progressRatio: Double {
         guard target > 0 else { return 0 }
@@ -379,40 +367,34 @@ struct CalorieWithAdviceCard: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
         .onAppear {
-            // ✅ 初回のみアドバイスを取得
-            if !hasLoadedInitialAdvice {
-                lastMealLogHash = currentMealLogHash
-                fetchAdvice()
-                hasLoadedInitialAdvice = true
-            }
+            lastMealCount = mealCount
+            fetchAdvice()
         }
         .onChange(of: selectedDate) { _, _ in
-            // ✅ 日付変更時はアドバイスを更新
-            lastMealLogHash = currentMealLogHash
+            lastMealCount = mealCount
             fetchAdvice()
+        }
+        // ✅ 食事数が変わったらアドバイスを更新
+        .onChange(of: mealCount) { oldCount, newCount in
+            if newCount != lastMealCount {
+                lastMealCount = newCount
+                fetchAdvice()
+            }
         }
         // ✅ 食事ログ追加通知を受け取ったら更新
         .onReceive(NotificationCenter.default.publisher(for: .mealLogAdded)) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let newHash = currentMealLogHash
-                if newHash != lastMealLogHash {
-                    lastMealLogHash = newHash
-                    fetchAdvice()
-                }
+                fetchAdvice()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mealLogUpdated)) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let newHash = currentMealLogHash
-                if newHash != lastMealLogHash {
-                    lastMealLogHash = newHash
-                    fetchAdvice()
-                }
+                fetchAdvice()
             }
         }
     }
     
-    // MARK: - APIからアドバイスを取得（Flash-Liteモデル使用 - 最速）
+    // MARK: - APIからアドバイスを取得（Flashモデル使用 - 高速）
     private func fetchAdvice() {
         isLoadingAdvice = true
         
