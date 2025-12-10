@@ -38,14 +38,6 @@ struct S27_2_ProfileEditView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                // 名前（一番上に追加）
-                ProfileEditRow(
-                    label: "名前",
-                    value: profileManager.name.isEmpty ? "未設定" : profileManager.name
-                ) {
-                    editName = profileManager.name
-                    showNameEditor = true
-                }
                 // 身長
                 ProfileEditRow(
                     label: "身長",

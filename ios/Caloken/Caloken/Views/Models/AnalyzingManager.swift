@@ -191,7 +191,8 @@ final class AnalyzingManager: ObservableObject {
             sugar: Int(result.total_sugar),
             fiber: Int(result.total_fiber),
             sodium: Int(result.total_sodium),
-            emoji: selectEmoji(for: name)
+            emoji: selectEmoji(for: name),
+            characterComment: result.character_comment
         )
         
         DispatchQueue.main.async {
@@ -238,7 +239,8 @@ final class AnalyzingManager: ObservableObject {
             sugar: 0,
             fiber: 0,
             sodium: 0,
-            emoji: "🍽️"
+            emoji: "🍽️",
+            characterComment: ""
         )
         
         DispatchQueue.main.async {

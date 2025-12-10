@@ -258,8 +258,8 @@ extension NetworkManager {
         
         let decoder = JSONDecoder()
         // レスポンスは { "analysis": { ... } } 形式
-        let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
-        return apiResponse.analysis
+        let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)
+        return result
     }
     
     /// 食事テキストを分析（Proモデル使用）
@@ -306,8 +306,8 @@ extension NetworkManager {
         
         let decoder = JSONDecoder()
         // レスポンスは { "analysis": { ... } } 形式
-        let apiResponse = try decoder.decode(MealAnalysisAPIResponse.self, from: data)
-        return apiResponse.analysis
+        let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)
+        return result
     }
 }
 

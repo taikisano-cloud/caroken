@@ -24,12 +24,6 @@ struct S27_1_SettingsView: View {
             VStack(spacing: 12) {
                 // 身体情報セクション
                 VStack(spacing: 0) {
-                    NavigationLink {
-                        S27_2_ProfileEditView()
-                    } label: {
-                        ProfileRow(label: "名前", value: profileManager.name.isEmpty ? "未設定" : profileManager.name)
-                    }
-                    Divider().padding(.leading, 16)
                     
                     
                     NavigationLink {
