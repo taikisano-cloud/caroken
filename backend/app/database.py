@@ -6,7 +6,7 @@ settings = get_settings()
 # Supabaseクライアント（通常のRLS適用）
 supabase: Client = create_client(
     settings.supabase_url,
-    settings.supabase_anon_key
+    settings.supabase_key
 )
 
 # Supabaseクライアント（管理者用、RLSバイパス）
