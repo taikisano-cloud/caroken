@@ -71,7 +71,6 @@ struct S46_MealDetailView: View {
         }
         .onAppear {
             loadOriginalData()
-            fetchCharacterComment()
         }
         .onChange(of: editingField) { oldValue, newValue in
             focusedField = newValue
@@ -162,7 +161,7 @@ struct S46_MealDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 } else {
-                    Text(characterComment.isEmpty ? result.characterComment : characterComment)
+                    Text(getDisplayComment())
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.primary)
                 }
@@ -173,6 +172,17 @@ struct S46_MealDetailView: View {
             .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
         }
         .offset(y: 10)
+    }
+    
+    // ✅ 表示するコメントを取得
+    private func getDisplayComment() -> String {
+        if !characterComment.isEmpty {
+            return characterComment
+        } else if !result.characterComment.isEmpty {
+            return result.characterComment
+        } else {
+            return "美味しそうだにゃ！🐱"
+        }
     }
     
     // MARK: - 料理名セクション
@@ -337,7 +347,7 @@ struct S46_MealDetailView: View {
         .padding(.top, 0)
     }
     
-    // MARK: - 下部ボタンセクション（AIに再計算ボタン削除）
+    // MARK: - 下部ボタンセクション
     private var bottomButtonsSection: some View {
         HStack(spacing: 12) {
             leftActionButton
@@ -350,7 +360,6 @@ struct S46_MealDetailView: View {
     
     @ViewBuilder
     private var leftActionButton: some View {
-        // ✅ isFromLog の場合は「削除」ボタンに変更（AIに再計算ボタンは削除）
         if isFromLog {
             secondaryButton(icon: "trash", title: "削除") {
                 if let logId = existingLogId {
@@ -451,11 +460,17 @@ struct S46_MealDetailView: View {
             selectedDate = existingDate
         }
         
-        // ✅ 既存のログから数量を復元
+        // ✅ 既存のログから数量とコメントを復元
         if let logId = existingLogId,
            let existingLog = MealLogsManager.shared.getLog(by: logId) {
             quantity = existingLog.quantity
-            // 1個あたりの値に戻す（保存時にquantity掛けたものが入っている場合）
+            
+            // ✅ 保存されたコメントがあれば復元
+            if !existingLog.characterComment.isEmpty {
+                characterComment = existingLog.characterComment
+            }
+            
+            // 1個あたりの値に戻す
             if existingLog.quantity > 1 {
                 editedCalories = existingLog.calories
                 editedProtein = Double(existingLog.protein)
@@ -471,11 +486,19 @@ struct S46_MealDetailView: View {
             checkIfAlreadySaved()
         } else {
             isBookmarked = false
+            // ✅ 新規の場合のみコメントを取得
+            if characterComment.isEmpty && result.characterComment.isEmpty {
+                fetchCharacterComment()
+            }
         }
     }
     
+    // ✅ AIにコメントを生成させる
     private func fetchCharacterComment() {
+        // 既にコメントがある場合はスキップ
+        guard characterComment.isEmpty else { return }
         guard result.characterComment.isEmpty || result.characterComment == "美味しそうだにゃ！🐱" else {
+            characterComment = result.characterComment
             return
         }
         
@@ -499,6 +522,7 @@ struct S46_MealDetailView: View {
                 }
             } catch {
                 await MainActor.run {
+                    characterComment = "美味しそうだにゃ！🐱"
                     isLoadingComment = false
                 }
             }
@@ -511,22 +535,26 @@ struct S46_MealDetailView: View {
     }
     
     private func saveToHome() {
+        // ✅ コメントを決定
+        let finalComment = characterComment.isEmpty ? result.characterComment : characterComment
+        
         // ✅ 1個あたりの値を保存（quantityは別で保存）
         let mealLog = MealLogEntry(
             id: existingLogId ?? UUID(),
             name: getMealName(),
-            calories: editedCalories,           // 1個あたり
-            protein: Int(editedProtein),        // 1個あたり
-            fat: Int(editedFat),                // 1個あたり
-            carbs: Int(editedCarbs),            // 1個あたり
-            sugar: Int(editedSugar),            // 1個あたり
-            fiber: Int(editedFiber),            // 1個あたり
-            sodium: Int(editedSodium),          // 1個あたり
+            calories: editedCalories,
+            protein: Int(editedProtein),
+            fat: Int(editedFat),
+            carbs: Int(editedCarbs),
+            sugar: Int(editedSugar),
+            fiber: Int(editedFiber),
+            sodium: Int(editedSodium),
             emoji: selectEmoji(),
             date: selectedDate,
             time: selectedDate,
             image: currentImage?.jpegData(compressionQuality: 0.7),
-            quantity: quantity                   // ✅ 数量を保存
+            quantity: quantity,
+            characterComment: finalComment  // ✅ コメントを保存
         )
         
         if isEditMode {
@@ -558,7 +586,7 @@ struct S46_MealDetailView: View {
             fiber: editedFiber * Double(quantity),
             sodium: editedSodium * Double(quantity),
             emoji: selectEmoji(),
-            imageData: currentImage?.jpegData(compressionQuality: 0.7)  // ✅ UIImage→Data変換
+            imageData: currentImage?.jpegData(compressionQuality: 0.7)
         )
         SavedMealsManager.shared.addMeal(savedMeal)
     }

@@ -76,9 +76,48 @@ class MealAnalysisRequest(BaseModel):
     description: Optional[str] = None
 
 
-class MealAnalysisResponse(BaseModel):
-    """食事分析レスポンス"""
-    analysis: DetailedMealAnalysis
+# ✅ 食事コメント生成用リクエスト
+class MealCommentRequest(BaseModel):
+    """食事コメントリクエスト"""
+    meal_name: str
+    calories: int
+    protein: float = 0
+    fat: float = 0
+    carbs: float = 0
+    sugar: float = 0
+    fiber: float = 0
+    sodium: float = 0
+
+
+class MealCommentResponse(BaseModel):
+    """食事コメントレスポンス"""
+    comment: str
+
+
+class ChatMessageCreate(BaseModel):
+    """チャットメッセージ作成用"""
+    message: str
+    is_user: bool
+    image_url: Optional[str] = None
+    chat_date: Optional[str] = None
+
+
+class ChatMessageResponse(BaseModel):
+    """チャットメッセージレスポンス"""
+    id: str
+    user_id: str
+    is_user: bool
+    message: str
+    image_url: Optional[str] = None
+    chat_date: str
+    created_at: str
+
+
+class ChatResponseWithMessages(BaseModel):
+    """チャットレスポンス（メッセージ付き）- ai.py用"""
+    response: str
+    user_message: ChatMessageResponse
+    ai_message: ChatMessageResponse
 
 
 # ============================================================
@@ -110,32 +149,6 @@ async def chat(request: ChatRequest):
         print(f"Chat error: {e}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"チャットエラー: {str(e)}")
-
-class ChatMessageCreate(BaseModel):
-    """チャットメッセージ作成用"""
-    message: str
-    is_user: bool
-    image_url: Optional[str] = None
-    chat_date: Optional[str] = None
-
-
-class ChatMessageResponse(BaseModel):
-    """チャットメッセージレスポンス"""
-    id: str
-    user_id: str
-    is_user: bool
-    message: str
-    image_url: Optional[str] = None
-    chat_date: str
-    created_at: str
-
-
-class ChatResponseWithMessages(BaseModel):
-    """チャットレスポンス（メッセージ付き）- ai.py用"""
-    response: str
-    user_message: ChatMessageResponse
-    ai_message: ChatMessageResponse
-
 
 
 # ============================================================
@@ -170,7 +183,7 @@ async def generate_advice(request: AdviceRequest):
 # 食事分析エンドポイント
 # ============================================================
 
-@router.post("/analyze-meal", response_model=DetailedMealAnalysis)  # ← 直接返す
+@router.post("/analyze-meal", response_model=DetailedMealAnalysis)
 async def analyze_meal(request: MealAnalysisRequest):
     """
     食事を分析してカロリー・栄養素を推定（Proモデル使用）
@@ -183,7 +196,7 @@ async def analyze_meal(request: MealAnalysisRequest):
         else:
             raise HTTPException(status_code=400, detail="画像またはテキストが必要です")
         
-        # DetailedMealAnalysisを辞書に変換して返す
+        # ✅ gemini_serviceの結果を直接DetailedMealAnalysisに変換
         return DetailedMealAnalysis(
             food_items=[
                 FoodItem(
@@ -214,3 +227,33 @@ async def analyze_meal(request: MealAnalysisRequest):
         print(f"Meal analysis error: {e}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"食事分析エラー: {str(e)}")
+
+
+# ============================================================
+# 食事コメント生成エンドポイント（新規追加）
+# ============================================================
+
+@router.post("/meal-comment", response_model=MealCommentResponse)
+async def generate_meal_comment(request: MealCommentRequest):
+    """
+    食事に対するカロちゃんのコメントを生成（Flash Liteモデル使用 - 高速）
+    """
+    try:
+        comment = await gemini_service.generate_meal_comment(
+            meal_name=request.meal_name,
+            calories=request.calories,
+            protein=request.protein,
+            fat=request.fat,
+            carbs=request.carbs,
+            sugar=request.sugar,
+            fiber=request.fiber,
+            sodium=request.sodium
+        )
+        
+        return MealCommentResponse(comment=comment)
+    except Exception as e:
+        import traceback
+        print(f"Meal comment error: {e}")
+        print(traceback.format_exc())
+        # エラー時はデフォルトコメントを返す
+        return MealCommentResponse(comment="美味しそうだにゃ！🐱")

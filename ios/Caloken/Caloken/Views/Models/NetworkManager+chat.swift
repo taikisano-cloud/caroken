@@ -6,6 +6,9 @@ import Foundation
 // MARK: - NetworkManager拡張（チャットAPI）
 extension NetworkManager {
     
+ 
+
+    
     /// カロちゃんチャットAPI（モード対応版）
     func sendChatWithUserContext(
         message: String,

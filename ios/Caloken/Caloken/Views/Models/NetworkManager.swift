@@ -6,7 +6,11 @@ class NetworkManager {
     
     let baseURL = "https://caroken-production.up.railway.app/api"
     
+    
+    
     private init() {}
+    
+
 }
 
 // MARK: - NetworkError
@@ -18,6 +22,8 @@ enum NetworkError: Error, LocalizedError {
     case noData
     case unauthorized
     case networkUnavailable
+    
+    
     
     var errorDescription: String? {
         switch self {

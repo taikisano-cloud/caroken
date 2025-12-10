@@ -5,19 +5,19 @@ import Combine
 struct MealLogEntry: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var name: String
-    var calories: Int
-    var protein: Int
-    var fat: Int
-    var carbs: Int
-    var sugar: Int
-    var fiber: Int
-    var sodium: Int
+    var calories: Int           // 1個あたりのカロリー
+    var protein: Int            // 1個あたり
+    var fat: Int                // 1個あたり
+    var carbs: Int              // 1個あたり
+    var sugar: Int              // 1個あたり
+    var fiber: Int              // 1個あたり
+    var sodium: Int             // 1個あたり(mg)
     var emoji: String
     var date: Date
     var time: Date
     var image: Data?
-    var quantity: Int
-    var characterComment: String  // ← 追加
+    var quantity: Int           // ✅ 数量
+    var characterComment: String // ✅ カロちゃんのコメント
     var isAnalyzing: Bool
     var isAnalyzingError: Bool
     var hasTimedOut: Bool
@@ -50,71 +50,72 @@ struct MealLogEntry: Identifiable, Codable, Equatable {
     
     // ✅ イニシャライザ
     init(
-            id: UUID = UUID(),
-            name: String = "",
-            calories: Int = 0,
-            protein: Int = 0,
-            fat: Int = 0,
-            carbs: Int = 0,
-            sugar: Int = 0,
-            fiber: Int = 0,
-            sodium: Int = 0,
-            emoji: String = "🍽️",
-            date: Date = Date(),
-            time: Date? = nil,
-            image: Data? = nil,
-            quantity: Int = 1,
-            characterComment: String = "",  // ← 追加
-            isAnalyzing: Bool = false,
-            isAnalyzingError: Bool = false,
-            hasTimedOut: Bool = false,
-            analysisProgress: Int = 0
-        ) {
-            self.id = id
-            self.name = name
-            self.calories = calories
-            self.protein = protein
-            self.fat = fat
-            self.carbs = carbs
-            self.sugar = sugar
-            self.fiber = fiber
-            self.sodium = sodium
-            self.emoji = emoji
-            self.date = date
-            self.time = time ?? date
-            self.image = image
-            self.quantity = quantity
-            self.characterComment = characterComment  // ← 追加
-            self.isAnalyzing = isAnalyzing
-            self.isAnalyzingError = isAnalyzingError
-            self.hasTimedOut = hasTimedOut
-            self.analysisProgress = analysisProgress
-        }
-        
-        // ✅ Codable - 旧データ対応
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            id = try container.decode(UUID.self, forKey: .id)
-            name = try container.decode(String.self, forKey: .name)
-            calories = try container.decode(Int.self, forKey: .calories)
-            protein = try container.decode(Int.self, forKey: .protein)
-            fat = try container.decode(Int.self, forKey: .fat)
-            carbs = try container.decode(Int.self, forKey: .carbs)
-            sugar = try container.decodeIfPresent(Int.self, forKey: .sugar) ?? 0
-            fiber = try container.decodeIfPresent(Int.self, forKey: .fiber) ?? 0
-            sodium = try container.decodeIfPresent(Int.self, forKey: .sodium) ?? 0
-            emoji = try container.decode(String.self, forKey: .emoji)
-            date = try container.decode(Date.self, forKey: .date)
-            time = try container.decodeIfPresent(Date.self, forKey: .time) ?? date
-            image = try container.decodeIfPresent(Data.self, forKey: .image)
-            quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
-            characterComment = try container.decodeIfPresent(String.self, forKey: .characterComment) ?? ""  // ← 追加
-            isAnalyzing = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzing) ?? false
-            isAnalyzingError = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzingError) ?? false
-            hasTimedOut = try container.decodeIfPresent(Bool.self, forKey: .hasTimedOut) ?? false
-            analysisProgress = try container.decodeIfPresent(Int.self, forKey: .analysisProgress) ?? 0
-        }
+        id: UUID = UUID(),
+        name: String = "",
+        calories: Int = 0,
+        protein: Int = 0,
+        fat: Int = 0,
+        carbs: Int = 0,
+        sugar: Int = 0,
+        fiber: Int = 0,
+        sodium: Int = 0,
+        emoji: String = "🍽️",
+        date: Date = Date(),
+        time: Date? = nil,
+        image: Data? = nil,
+        quantity: Int = 1,
+        characterComment: String = "",  // ✅ 追加
+        isAnalyzing: Bool = false,
+        isAnalyzingError: Bool = false,
+        hasTimedOut: Bool = false,
+        analysisProgress: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.calories = calories
+        self.protein = protein
+        self.fat = fat
+        self.carbs = carbs
+        self.sugar = sugar
+        self.fiber = fiber
+        self.sodium = sodium
+        self.emoji = emoji
+        self.date = date
+        self.time = time ?? date
+        self.image = image
+        self.quantity = quantity
+        self.characterComment = characterComment  // ✅ 追加
+        self.isAnalyzing = isAnalyzing
+        self.isAnalyzingError = isAnalyzingError
+        self.hasTimedOut = hasTimedOut
+        self.analysisProgress = analysisProgress
     }
+    
+    // ✅ Codable - 旧データ対応
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        calories = try container.decode(Int.self, forKey: .calories)
+        protein = try container.decode(Int.self, forKey: .protein)
+        fat = try container.decode(Int.self, forKey: .fat)
+        carbs = try container.decode(Int.self, forKey: .carbs)
+        sugar = try container.decodeIfPresent(Int.self, forKey: .sugar) ?? 0
+        fiber = try container.decodeIfPresent(Int.self, forKey: .fiber) ?? 0
+        sodium = try container.decodeIfPresent(Int.self, forKey: .sodium) ?? 0
+        emoji = try container.decode(String.self, forKey: .emoji)
+        date = try container.decode(Date.self, forKey: .date)
+        time = try container.decodeIfPresent(Date.self, forKey: .time) ?? date
+        image = try container.decodeIfPresent(Data.self, forKey: .image)
+        quantity = try container.decodeIfPresent(Int.self, forKey: .quantity) ?? 1
+        characterComment = try container.decodeIfPresent(String.self, forKey: .characterComment) ?? ""  // ✅ 旧データは空文字
+        isAnalyzing = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzing) ?? false
+        isAnalyzingError = try container.decodeIfPresent(Bool.self, forKey: .isAnalyzingError) ?? false
+        hasTimedOut = try container.decodeIfPresent(Bool.self, forKey: .hasTimedOut) ?? false
+        analysisProgress = try container.decodeIfPresent(Int.self, forKey: .analysisProgress) ?? 0
+    }
+}
+
 // MARK: - 食事ログマネージャー
 final class MealLogsManager: ObservableObject {
     static let shared = MealLogsManager()
@@ -163,6 +164,7 @@ final class MealLogsManager: ObservableObject {
             time: Date(),
             image: imageData,
             quantity: 1,
+            characterComment: "",
             isAnalyzing: true
         )
         allLogs.append(log)
@@ -181,7 +183,8 @@ final class MealLogsManager: ObservableObject {
         sugar: Int = 0,
         fiber: Int = 0,
         sodium: Int = 0,
-        emoji: String
+        emoji: String,
+        characterComment: String = ""  // ✅ 追加
     ) {
         if let index = allLogs.firstIndex(where: { $0.id == id }) {
             allLogs[index].name = name
@@ -193,6 +196,7 @@ final class MealLogsManager: ObservableObject {
             allLogs[index].fiber = fiber
             allLogs[index].sodium = sodium
             allLogs[index].emoji = emoji
+            allLogs[index].characterComment = characterComment  // ✅ 追加
             allLogs[index].isAnalyzing = false
             allLogs[index].analysisProgress = 100
             saveLogs()

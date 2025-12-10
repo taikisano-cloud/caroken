@@ -296,7 +296,7 @@ class GeminiService:
 - 名前がない場合は「ご主人」や「あなた」は使わず、主語を省略して話す
 
 【重要】
-- ユーザーの情報（性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
+- ユーザーの情報（名前、性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
 - 会話の流れを理解して、自然に返答する
 - 毎回カロリーの話をするのではなく、ユーザーの質問や話題に合わせる
 - 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
@@ -426,6 +426,56 @@ class GeminiService:
         except Exception as e:
             print(f"Gemini API Error (advice): {e}")
             return "今日も一緒にがんばろうにゃ！🐱"
+    
+    @staticmethod
+    async def generate_meal_comment(
+        meal_name: str,
+        calories: int,
+        protein: float = 0,
+        fat: float = 0,
+        carbs: float = 0,
+        sugar: float = 0,
+        fiber: float = 0,
+        sodium: float = 0
+    ) -> str:
+        """
+        食事に対するカロちゃんのコメントを生成（Flash Lite使用 - 高速）
+        """
+        prompt = f"""
+あなたは「カロちゃん」という猫のAIアシスタントです。
+ユーザーが食べた食事について、一言コメントをしてください。
+
+【食事内容】
+- 料理名: {meal_name}
+- カロリー: {calories}kcal
+- たんぱく質: {protein}g
+- 脂質: {fat}g
+- 炭水化物: {carbs}g
+- 糖分: {sugar}g
+- 食物繊維: {fiber}g
+- ナトリウム: {sodium}mg
+
+【指示】
+この食事について、カロちゃんとして一言コメントしてください。
+- 1-2文で短く
+- 語尾に「にゃ」をつける
+- 絵文字を1-2個使う
+- 栄養バランスや食事内容に合わせたコメント
+- ポジティブで励ましになるように
+
+例:
+- 「たんぱく質たっぷりで筋肉喜ぶにゃ💪✨」
+- 「野菜もしっかり摂れていい感じだにゃ🥗」
+- 「美味しそう！エネルギーチャージだにゃ🔥」
+- 「バランスいい食事だにゃ〜😊🍽️」
+"""
+        
+        try:
+            response = model_flash_lite.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            print(f"Gemini API Error (meal comment): {e}")
+            return "美味しそうだにゃ！🐱"
 
 
 gemini_service = GeminiService()
