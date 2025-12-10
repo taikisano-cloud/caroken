@@ -89,51 +89,18 @@ async def chat_with_calo(
         if profile_response.data:
             goal_calories = profile_response.data.get("daily_calorie_goal", 2000)
         
-        # ユーザーの記憶を取得（期限切れを除く）
-        memories_response = supabase.table("user_memories").select("*").eq(
-            "user_id", current_user["id"]
-        ).execute()
-        
-        user_memories = []
-        if memories_response.data:
-            now = datetime.now().isoformat()
-            for mem in memories_response.data:
-                # 期限切れでないものだけ取得
-                if mem.get("expires_at") is None or mem.get("expires_at") > now:
-                    user_memories.append(mem)
-        
         user_context = {
             "today_calories": today_calories,
             "goal_calories": goal_calories,
             "today_exercise": today_exercise
         }
         
-        # AIレスポンスを生成（dictで返ってくる）
-        ai_result = await gemini_service.chat(
+        # AIレスポンスを生成
+        ai_response = await gemini_service.chat(
             message=request.message,
             user_context=user_context,
-            image_base64=request.image_base64,
-            mode=getattr(request, 'mode', 'fast'),
-            user_memories=user_memories
+            image_base64=request.image_base64
         )
-        
-        ai_response = ai_result.get("response", "")
-        memory_to_save = ai_result.get("memory_to_save")
-        
-        # 記憶を保存（重要度3以上のもの）
-        if memory_to_save and memory_to_save.get("importance", 0) >= 3:
-            try:
-                memory_data = {
-                    "user_id": current_user["id"],
-                    "category": memory_to_save.get("category"),
-                    "content": memory_to_save.get("content"),
-                    "importance": memory_to_save.get("importance"),
-                    "expires_at": memory_to_save.get("expires_at"),
-                    "created_at": memory_to_save.get("created_at")
-                }
-                supabase.table("user_memories").insert(memory_data).execute()
-            except Exception as e:
-                print(f"Memory save error: {e}")
         
         # ユーザーメッセージを保存
         user_msg_data = {
