@@ -27,6 +27,11 @@ struct S27_1_SettingsView: View {
                     NavigationLink {
                         S27_2_ProfileEditView()
                     } label: {
+                        ProfileRow(label: "名前", value: profileManager.name.isEmpty ? "未設定" : profileManager.name)
+                    }
+                    NavigationLink {
+                        S27_2_ProfileEditView()
+                    } label: {
                         ProfileRow(label: "身長", value: "\(profileManager.height) cm")
                     }
                     

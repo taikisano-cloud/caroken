@@ -12,11 +12,18 @@ struct S27_2_ProfileEditView: View {
     @State private var showGenderPicker: Bool = false
     @State private var showDatePicker: Bool = false
     
+    
     // ローカル編集値
     @State private var editHeight: Int = 170
     @State private var editWeight: Double = 65.0
     @State private var editGender: String = "未設定"
     @State private var editBirthDate: Date = Date()
+    // 編集用シート表示フラグに追加
+    @State private var showNameEditor: Bool = false
+
+    // ローカル編集値に追加
+    @State private var editName: String = ""
+    
     
     // 性別の表示名
     private func genderDisplayName(_ gender: String) -> String {
@@ -31,6 +38,14 @@ struct S27_2_ProfileEditView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
+                // 名前（一番上に追加）
+                ProfileEditRow(
+                    label: "名前",
+                    value: profileManager.name.isEmpty ? "未設定" : profileManager.name
+                ) {
+                    editName = profileManager.name
+                    showNameEditor = true
+                }
                 // 身長
                 ProfileEditRow(
                     label: "身長",
@@ -115,6 +130,14 @@ struct S27_2_ProfileEditView: View {
                 profileManager.saveProfile()
             })
             .presentationDetents([.height(350)])
+        }
+        // 名前編集シート
+        .sheet(isPresented: $showNameEditor) {
+            NameEditorSheet(name: $editName, onSave: {
+                profileManager.name = editName
+                profileManager.saveProfile()
+            })
+            .presentationDetents([.height(200)])
         }
         .enableSwipeBack()
     }
@@ -390,7 +413,46 @@ struct DatePickerSheet: View {
         }
     }
 }
-
+// MARK: - 名前編集シート
+struct NameEditorSheet: View {
+    @Binding var name: String
+    var onSave: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                TextField("名前を入力", text: $name)
+                    .font(.system(size: 18))
+                    .padding()
+                    .background(Color(UIColor.systemGray6))
+                    .cornerRadius(12)
+                    .focused($isFocused)
+                
+                Text("カロちゃんがこの名前で呼びかけます")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("名前")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完了") {
+                        onSave()
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                isFocused = true
+            }
+        }
+    }
+}
 #Preview {
     NavigationStack {
         S27_2_ProfileEditView()

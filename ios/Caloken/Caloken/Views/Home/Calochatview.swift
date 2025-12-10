@@ -508,6 +508,7 @@ struct CaloChatView: View {
         let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }.joined(separator: "、")
         
         return [
+            "name": profileManager.name,  // ← 追加
             "gender": profileManager.gender,
             "age": profileManager.age,
             "height": profileManager.height,
