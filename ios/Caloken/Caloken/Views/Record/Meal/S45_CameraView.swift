@@ -575,19 +575,12 @@ struct LabelHelpSheet: View {
             .padding(.top, 28)
             .padding(.bottom, 24)
             
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(red: 0.12, green: 0.18, blue: 0.15))
+            // calory1画像を表示
+            Image("calory1")
+                .resizable()
+                .scaledToFit()
                 .frame(height: 200)
-                .overlay(
-                    VStack(spacing: 12) {
-                        Image(systemName: "doc.text.viewfinder")
-                            .font(.system(size: 50))
-                            .foregroundColor(.white.opacity(0.7))
-                        Text("栄養成分表示")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                )
+                .cornerRadius(16)
                 .padding(.horizontal, 24)
             
             VStack(alignment: .leading, spacing: 0) {

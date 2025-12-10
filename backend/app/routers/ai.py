@@ -131,9 +131,12 @@ async def chat_with_calo(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"Chat error: {e}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"チャットエラー: {str(e)}"
         )
 
 

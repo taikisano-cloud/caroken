@@ -11,8 +11,9 @@ settings = get_settings()
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
-# モデル設定（2.5 Pro - 高度な推論能力）
-model = genai.GenerativeModel('gemini-2.5-pro')
+# モデル設定
+model = genai.GenerativeModel('gemini-2.5-pro')  # メイン（チャット、分析）
+model_flash_lite = genai.GenerativeModel('gemini-2.0-flash-lite')  # 軽量（ホームアドバイス）
 
 
 class GeminiService:
@@ -311,7 +312,9 @@ class GeminiService:
             return response.text.strip()
             
         except Exception as e:
+            import traceback
             print(f"Gemini API Error: {e}")
+            print(traceback.format_exc())
             return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
     
     @staticmethod
@@ -371,7 +374,7 @@ class GeminiService:
 """
         
         try:
-            response = model.generate_content(prompt)
+            response = model_flash_lite.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             print(f"Gemini API Error (advice): {e}")
