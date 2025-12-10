@@ -4,8 +4,11 @@ from app.middleware.auth import get_current_user
 from app.services.gemini_service import gemini_service
 from app.models.chat import (
     MealAnalysisRequest, DetailedMealAnalysis,
-    ChatRequest, ChatResponse, ChatMessageCreate, ChatMessageResponse
+    ChatRequest, ChatMessageCreate, ChatMessageResponse,
+    ChatResponseWithMessages as ChatResponse
 )
+
+
 from datetime import datetime, date
 
 router = APIRouter(prefix="/ai", tags=["AI分析"])

@@ -111,6 +111,32 @@ async def chat(request: ChatRequest):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"チャットエラー: {str(e)}")
 
+class ChatMessageCreate(BaseModel):
+    """チャットメッセージ作成用"""
+    message: str
+    is_user: bool
+    image_url: Optional[str] = None
+    chat_date: Optional[str] = None
+
+
+class ChatMessageResponse(BaseModel):
+    """チャットメッセージレスポンス"""
+    id: str
+    user_id: str
+    is_user: bool
+    message: str
+    image_url: Optional[str] = None
+    chat_date: str
+    created_at: str
+
+
+class ChatResponseWithMessages(BaseModel):
+    """チャットレスポンス（メッセージ付き）- ai.py用"""
+    response: str
+    user_message: ChatMessageResponse
+    ai_message: ChatMessageResponse
+
+
 
 # ============================================================
 # ホーム画面アドバイスエンドポイント
