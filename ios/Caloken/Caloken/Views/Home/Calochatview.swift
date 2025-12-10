@@ -753,9 +753,7 @@ struct ChatBubble: View {
                         .offset(y: 12)
                     
                     if let text = message.text {
-                        Text(text)
-                            .font(.system(size: 16))
-                            .foregroundColor(.primary)
+                        LinkedTextView(text: text)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
                             .background(Color(UIColor.secondarySystemGroupedBackground))
@@ -767,13 +765,93 @@ struct ChatBubble: View {
                                     Label("コピー", systemImage: "doc.on.doc")
                                 }
                             }
-                            .textSelection(.enabled)
                     }
                 }
                 Spacer()
             }
         }
     }
+}
+
+// MARK: - URLをタップ可能なテキストビュー
+struct LinkedTextView: View {
+    let text: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(parseTextWithLinks(text).enumerated()), id: \.offset) { _, element in
+                if element.isLink, let url = URL(string: element.text) {
+                    Link(destination: url) {
+                        Text(element.text)
+                            .font(.system(size: 14))
+                            .foregroundColor(.blue)
+                            .underline()
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                    }
+                } else {
+                    Text(element.text)
+                        .font(.system(size: 16))
+                        .foregroundColor(.primary)
+                }
+            }
+        }
+    }
+    
+    private func parseTextWithLinks(_ text: String) -> [TextElement] {
+        var elements: [TextElement] = []
+        
+        // URLパターン
+        let urlPattern = #"https?://[^\s\u3000\n]+"#
+        
+        guard let regex = try? NSRegularExpression(pattern: urlPattern, options: []) else {
+            return [TextElement(text: text, isLink: false)]
+        }
+        
+        let nsString = text as NSString
+        let results = regex.matches(in: text, options: [], range: NSRange(location: 0, length: nsString.length))
+        
+        var lastEnd = 0
+        
+        for result in results {
+            // URL前のテキスト
+            if result.range.location > lastEnd {
+                let beforeText = nsString.substring(with: NSRange(location: lastEnd, length: result.range.location - lastEnd))
+                let trimmed = beforeText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    elements.append(TextElement(text: trimmed, isLink: false))
+                }
+            }
+            
+            // URL
+            let urlText = nsString.substring(with: result.range)
+            elements.append(TextElement(text: urlText, isLink: true))
+            
+            lastEnd = result.range.location + result.range.length
+        }
+        
+        // URL後のテキスト
+        if lastEnd < nsString.length {
+            let afterText = nsString.substring(from: lastEnd)
+            let trimmed = afterText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                elements.append(TextElement(text: trimmed, isLink: false))
+            }
+        }
+        
+        // URLがない場合
+        if elements.isEmpty {
+            elements.append(TextElement(text: text, isLink: false))
+        }
+        
+        return elements
+    }
+}
+
+// MARK: - テキスト要素
+struct TextElement {
+    let text: String
+    let isLink: Bool
 }
 
 // MARK: - 吹き出し三角マーク（左向き）
