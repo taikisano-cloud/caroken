@@ -1,94 +1,15 @@
 import Foundation
 
 // MARK: - NetworkManager
-
-// MARK: - 食事分析API
-extension NetworkManager {
+class NetworkManager {
+    static let shared = NetworkManager()
     
-    /// 食事画像を分析
-    func analyzeMeal(imageBase64: String) async throws -> MealAnalysisData {
-        // ✅ 正しいエンドポイント
-        let endpoint = "\(baseURL)/ai/analyze-meal/test"
-        
-        print("🍽️ Meal Analysis (Image):")
-        print("  - URL: \(endpoint)")
-        
-        guard let url = URL(string: endpoint) else {
-            throw NetworkError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // 認証不要（テストエンドポイント）
-        
-        let body: [String: Any] = [
-            "image_base64": imageBase64
-        ]
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        print("  - Status: \(httpResponse.statusCode)")
-        
-        guard httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
-        }
-        
-        let decoder = JSONDecoder()
-        return try decoder.decode(MealAnalysisData.self, from: data)
-    }
+    let baseURL = "https://caloken-backend-production.up.railway.app/api"
     
-    /// 食事テキストを分析
-    func analyzeMeal(description: String) async throws -> MealAnalysisData {
-        // ✅ 正しいエンドポイント
-        let endpoint = "\(baseURL)/ai/analyze-meal/test"
-        
-        print("🍽️ Meal Analysis (Text):")
-        print("  - URL: \(endpoint)")
-        print("  - Description: \(description)")
-        
-        guard let url = URL(string: endpoint) else {
-            throw NetworkError.invalidURL
-        }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        // 認証不要（テストエンドポイント）
-        
-        let body: [String: Any] = [
-            "description": description
-        ]
-        
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NetworkError.invalidResponse
-        }
-        
-        print("  - Status: \(httpResponse.statusCode)")
-        
-        guard httpResponse.statusCode == 200 else {
-            throw NetworkError.serverError(statusCode: httpResponse.statusCode)
-        }
-        
-        let decoder = JSONDecoder()
-        return try decoder.decode(MealAnalysisData.self, from: data)
-    }
+    private init() {}
 }
 
 // MARK: - NetworkError
-
 enum NetworkError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
