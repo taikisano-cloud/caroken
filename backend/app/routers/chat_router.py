@@ -1,17 +1,88 @@
 from fastapi import APIRouter, HTTPException
-from app.models.chat import (
-    ChatRequest, ChatResponse,
-    AdviceRequest, AdviceResponse,
-    MealCommentRequest, MealCommentResponse,
-    MealAnalysisRequest, MealAnalysisResponse
-)
+from pydantic import BaseModel
+from typing import Optional, List, Literal
 from app.services.gemini_service import gemini_service
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
 
 
 # ============================================================
-# チャットエンドポイント（2モデル対応）
+# リクエスト/レスポンスモデル
+# ============================================================
+
+ChatMode = Literal["fast", "thinking"]
+
+
+class ChatRequest(BaseModel):
+    """チャットリクエスト"""
+    message: str
+    image_base64: Optional[str] = None
+    chat_history: Optional[List[dict]] = None
+    user_context: Optional[dict] = None
+    mode: ChatMode = "fast"
+
+
+class ChatResponse(BaseModel):
+    """チャットレスポンス"""
+    response: str
+    mode: ChatMode
+
+
+class AdviceRequest(BaseModel):
+    """ホーム画面アドバイスリクエスト"""
+    today_calories: int
+    goal_calories: int
+    today_protein: int = 0
+    today_fat: int = 0
+    today_carbs: int = 0
+    today_meals: str = ""
+    meal_count: int = 0
+
+
+class AdviceResponse(BaseModel):
+    """アドバイスレスポンス"""
+    advice: str
+
+
+class FoodItem(BaseModel):
+    """食品アイテム"""
+    name: str
+    amount: str
+    calories: int
+    protein: float
+    fat: float
+    carbs: float
+    sugar: float = 0
+    fiber: float = 0
+    sodium: float = 0
+
+
+class DetailedMealAnalysis(BaseModel):
+    """詳細な食事分析結果"""
+    food_items: List[FoodItem]
+    total_calories: int
+    total_protein: float
+    total_fat: float
+    total_carbs: float
+    total_sugar: float = 0
+    total_fiber: float = 0
+    total_sodium: float = 0
+    character_comment: str
+
+
+class MealAnalysisRequest(BaseModel):
+    """食事分析リクエスト"""
+    image_base64: Optional[str] = None
+    description: Optional[str] = None
+
+
+class MealAnalysisResponse(BaseModel):
+    """食事分析レスポンス"""
+    analysis: DetailedMealAnalysis
+
+
+# ============================================================
+# チャットエンドポイント
 # ============================================================
 
 @router.post("/chat", response_model=ChatResponse)
@@ -19,7 +90,7 @@ async def chat(request: ChatRequest):
     """
     カロちゃんとチャット
     
-    - mode: "fast"（高速モード - Flash）or "thinking"（思考モード - Pro）
+    - mode: "fast"（高速モード - Flash Lite）or "thinking"（思考モード - Pro）
     """
     try:
         response = await gemini_service.chat(
@@ -35,18 +106,20 @@ async def chat(request: ChatRequest):
             mode=request.mode
         )
     except Exception as e:
+        import traceback
         print(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail="チャットエラーが発生しました")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"チャットエラー: {str(e)}")
 
 
 # ============================================================
-# ホーム画面アドバイスエンドポイント（Flash使用）
+# ホーム画面アドバイスエンドポイント
 # ============================================================
 
 @router.post("/advice", response_model=AdviceResponse)
 async def generate_advice(request: AdviceRequest):
     """
-    ホーム画面用のアドバイスを生成（Flashモデル使用）
+    ホーム画面用のアドバイスを生成（Flash Liteモデル使用 - 高速）
     """
     try:
         advice = await gemini_service.generate_advice(
@@ -61,48 +134,20 @@ async def generate_advice(request: AdviceRequest):
         
         return AdviceResponse(advice=advice)
     except Exception as e:
+        import traceback
         print(f"Advice error: {e}")
-        raise HTTPException(status_code=500, detail="アドバイス生成エラーが発生しました")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"アドバイス生成エラー: {str(e)}")
 
 
 # ============================================================
-# 食事詳細コメントエンドポイント（Flash使用）
-# ============================================================
-
-@router.post("/meal-comment", response_model=MealCommentResponse)
-async def generate_meal_comment(request: MealCommentRequest):
-    """
-    食事詳細画面用のカロちゃんコメントを生成（Flashモデル使用）
-    """
-    try:
-        comment = await gemini_service.generate_meal_comment(
-            meal_name=request.meal_name,
-            calories=request.calories,
-            protein=request.protein,
-            fat=request.fat,
-            carbs=request.carbs,
-            sugar=request.sugar,
-            fiber=request.fiber,
-            sodium=request.sodium
-        )
-        
-        return MealCommentResponse(comment=comment)
-    except Exception as e:
-        print(f"Meal comment error: {e}")
-        raise HTTPException(status_code=500, detail="コメント生成エラーが発生しました")
-
-
-# ============================================================
-# 食事分析エンドポイント（Pro使用）
+# 食事分析エンドポイント
 # ============================================================
 
 @router.post("/analyze-meal", response_model=MealAnalysisResponse)
 async def analyze_meal(request: MealAnalysisRequest):
     """
     食事を分析してカロリー・栄養素を推定（Proモデル使用）
-    
-    - image_base64: 画像のBase64エンコード文字列
-    - description: テキストでの食事説明（画像がない場合）
     """
     try:
         if request.image_base64:
@@ -116,5 +161,7 @@ async def analyze_meal(request: MealAnalysisRequest):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
         print(f"Meal analysis error: {e}")
-        raise HTTPException(status_code=500, detail="食事分析エラーが発生しました")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"食事分析エラー: {str(e)}")

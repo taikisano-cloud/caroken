@@ -193,10 +193,15 @@ class GeminiService:
         message: str,
         user_context: Optional[dict] = None,
         image_base64: Optional[str] = None,
-        chat_history: Optional[list] = None
+        chat_history: Optional[list] = None,
+        mode: str = "fast"
     ) -> str:
         """
         カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
+        
+        mode:
+        - "fast": Flash Lite使用（高速）
+        - "thinking": Pro使用（高品質）
         """
         context = ""
         if user_context:
@@ -300,14 +305,18 @@ class GeminiService:
 """
         
         try:
+            # モデル選択: 画像ありまたはthinkingモードはPro、それ以外はFlash Lite
+            use_pro = image_base64 is not None or mode == "thinking"
+            selected_model = model if use_pro else model_flash_lite
+            
             if image_base64:
                 image_data = base64.b64decode(image_base64)
-                response = model.generate_content([
+                response = selected_model.generate_content([
                     system_prompt,
                     {"mime_type": "image/jpeg", "data": image_data}
                 ])
             else:
-                response = model.generate_content(system_prompt)
+                response = selected_model.generate_content(system_prompt)
             
             return response.text.strip()
             
