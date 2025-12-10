@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Literal
+from datetime import date
 
 
 # ============================================================
@@ -15,7 +16,8 @@ class ChatRequest(BaseModel):
     image_base64: Optional[str] = None
     chat_history: Optional[List[dict]] = None
     user_context: Optional[dict] = None
-    mode: ChatMode = "fast"  # "fast" or "thinking"
+    mode: ChatMode = "fast"
+    chat_date: Optional[date] = None  # ai.py用に追加
 
 
 class ChatResponse(BaseModel):
@@ -77,9 +79,9 @@ class FoodItem(BaseModel):
     protein: float
     fat: float
     carbs: float
-    sugar: float = 0       # 糖分 (g)
-    fiber: float = 0       # 食物繊維 (g)
-    sodium: float = 0      # ナトリウム (mg)
+    sugar: float = 0
+    fiber: float = 0
+    sodium: float = 0
 
 
 class DetailedMealAnalysis(BaseModel):
@@ -89,9 +91,9 @@ class DetailedMealAnalysis(BaseModel):
     total_protein: float
     total_fat: float
     total_carbs: float
-    total_sugar: float = 0      # 糖分合計 (g)
-    total_fiber: float = 0      # 食物繊維合計 (g)
-    total_sodium: float = 0     # ナトリウム合計 (mg)
+    total_sugar: float = 0
+    total_fiber: float = 0
+    total_sodium: float = 0
     character_comment: str
 
 
@@ -104,3 +106,33 @@ class MealAnalysisRequest(BaseModel):
 class MealAnalysisResponse(BaseModel):
     """食事分析レスポンス"""
     analysis: DetailedMealAnalysis
+
+
+# ============================================================
+# チャットメッセージDB関連モデル（ai.py用）
+# ============================================================
+
+class ChatMessageCreate(BaseModel):
+    """チャットメッセージ作成用"""
+    message: str
+    is_user: bool
+    image_url: Optional[str] = None
+    chat_date: Optional[str] = None
+
+
+class ChatMessageResponse(BaseModel):
+    """チャットメッセージレスポンス"""
+    id: str
+    user_id: str
+    is_user: bool
+    message: str
+    image_url: Optional[str] = None
+    chat_date: str
+    created_at: str
+
+
+class ChatResponseWithMessages(BaseModel):
+    """チャットレスポンス（メッセージ付き）- ai.py用"""
+    response: str
+    user_message: ChatMessageResponse
+    ai_message: ChatMessageResponse

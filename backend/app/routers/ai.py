@@ -1,138 +1,172 @@
-from pydantic import BaseModel
-from typing import Optional, List, Literal
-from datetime import date
+from fastapi import APIRouter, HTTPException, Depends, status
+from app.database import get_supabase_admin
+from app.middleware.auth import get_current_user
+from app.services.gemini_service import gemini_service
+from app.models.chat import (
+    MealAnalysisRequest, DetailedMealAnalysis,
+    ChatRequest, ChatMessageCreate, ChatMessageResponse,
+    ChatResponseWithMessages as ChatResponse
+)
 
 
-# ============================================================
-# チャット関連モデル
-# ============================================================
+from datetime import datetime, date
 
-ChatMode = Literal["fast", "thinking"]
+router = APIRouter(prefix="/ai", tags=["AI分析"])
 
 
-class ChatRequest(BaseModel):
-    """チャットリクエスト"""
-    message: str
-    image_base64: Optional[str] = None
-    chat_history: Optional[List[dict]] = None
-    user_context: Optional[dict] = None
-    mode: ChatMode = "fast"
-    chat_date: Optional[date] = None  # ai.py用に追加
+@router.post("/analyze-meal", response_model=DetailedMealAnalysis)
+async def analyze_meal(
+    request: MealAnalysisRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    食事画像またはテキストからカロリー・栄養素を分析
+    """
+    try:
+        if request.image_base64:
+            # 画像から分析
+            result = await gemini_service.analyze_meal_image(request.image_base64)
+        elif request.description:
+            # テキストから分析
+            result = await gemini_service.analyze_meal_text(request.description)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Either image_base64 or description is required"
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
-class ChatResponse(BaseModel):
-    """チャットレスポンス"""
-    response: str
-    mode: ChatMode
+@router.post("/chat", response_model=ChatResponse)
+async def chat_with_calo(
+    request: ChatRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    カロちゃんとチャット
+    """
+    try:
+        supabase = get_supabase_admin()
+        chat_date = request.chat_date or date.today()
+        
+        # ユーザーのコンテキストを取得（今日のカロリーなど）
+        today_str = date.today().isoformat()
+        
+        # 今日の食事
+        meals_response = supabase.table("meal_logs").select("calories").eq(
+            "user_id", current_user["id"]
+        ).gte(
+            "logged_at", f"{today_str}T00:00:00"
+        ).lt(
+            "logged_at", f"{today_str}T23:59:59"
+        ).execute()
+        
+        today_calories = sum(m["calories"] for m in meals_response.data) if meals_response.data else 0
+        
+        # 今日の運動
+        exercises_response = supabase.table("exercise_logs").select("calories_burned").eq(
+            "user_id", current_user["id"]
+        ).gte(
+            "logged_at", f"{today_str}T00:00:00"
+        ).lt(
+            "logged_at", f"{today_str}T23:59:59"
+        ).execute()
+        
+        today_exercise = sum(e["calories_burned"] for e in exercises_response.data) if exercises_response.data else 0
+        
+        # 目標カロリー
+        profile_response = supabase.table("profiles").select("daily_calorie_goal").eq(
+            "id", current_user["id"]
+        ).single().execute()
+        
+        goal_calories = 2000
+        if profile_response.data:
+            goal_calories = profile_response.data.get("daily_calorie_goal", 2000)
+        
+        user_context = {
+            "today_calories": today_calories,
+            "goal_calories": goal_calories,
+            "today_exercise": today_exercise
+        }
+        
+        # AIレスポンスを生成
+        ai_response = await gemini_service.chat(
+            message=request.message,
+            user_context=user_context,
+            image_base64=request.image_base64
+        )
+        
+        # ユーザーメッセージを保存
+        user_msg_data = {
+            "user_id": current_user["id"],
+            "is_user": True,
+            "message": request.message,
+            "image_url": None,  # 画像URLは別途実装
+            "chat_date": chat_date.isoformat()
+        }
+        user_msg_response = supabase.table("chat_messages").insert(user_msg_data).execute()
+        
+        # AIメッセージを保存
+        ai_msg_data = {
+            "user_id": current_user["id"],
+            "is_user": False,
+            "message": ai_response,
+            "image_url": None,
+            "chat_date": chat_date.isoformat()
+        }
+        ai_msg_response = supabase.table("chat_messages").insert(ai_msg_data).execute()
+        
+        return ChatResponse(
+            response=ai_response,
+            user_message=ChatMessageResponse(**user_msg_response.data[0]),
+            ai_message=ChatMessageResponse(**ai_msg_response.data[0])
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Chat error: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"チャットエラー: {str(e)}"
+        )
 
 
-# ============================================================
-# アドバイス関連モデル
-# ============================================================
-
-class AdviceRequest(BaseModel):
-    """ホーム画面アドバイスリクエスト"""
-    today_calories: int
-    goal_calories: int
-    today_protein: int = 0
-    today_fat: int = 0
-    today_carbs: int = 0
-    today_meals: str = ""
-    meal_count: int = 0
-
-
-class AdviceResponse(BaseModel):
-    """アドバイスレスポンス"""
-    advice: str
-
-
-# ============================================================
-# 食事コメント関連モデル
-# ============================================================
-
-class MealCommentRequest(BaseModel):
-    """食事詳細コメントリクエスト"""
-    meal_name: str
-    calories: int
-    protein: float = 0
-    fat: float = 0
-    carbs: float = 0
-    sugar: float = 0
-    fiber: float = 0
-    sodium: float = 0
-
-
-class MealCommentResponse(BaseModel):
-    """食事コメントレスポンス"""
-    comment: str
-
-
-# ============================================================
-# 食事分析関連モデル
-# ============================================================
-
-class FoodItem(BaseModel):
-    """食品アイテム（全栄養素対応）"""
-    name: str
-    amount: str
-    calories: int
-    protein: float
-    fat: float
-    carbs: float
-    sugar: float = 0
-    fiber: float = 0
-    sodium: float = 0
-
-
-class DetailedMealAnalysis(BaseModel):
-    """詳細な食事分析結果（全栄養素対応）"""
-    food_items: List[FoodItem]
-    total_calories: int
-    total_protein: float
-    total_fat: float
-    total_carbs: float
-    total_sugar: float = 0
-    total_fiber: float = 0
-    total_sodium: float = 0
-    character_comment: str
-
-
-class MealAnalysisRequest(BaseModel):
-    """食事分析リクエスト"""
-    image_base64: Optional[str] = None
-    description: Optional[str] = None
-
-
-class MealAnalysisResponse(BaseModel):
-    """食事分析レスポンス"""
-    analysis: DetailedMealAnalysis
-
-
-# ============================================================
-# チャットメッセージDB関連モデル（ai.py用）
-# ============================================================
-
-class ChatMessageCreate(BaseModel):
-    """チャットメッセージ作成用"""
-    message: str
-    is_user: bool
-    image_url: Optional[str] = None
-    chat_date: Optional[str] = None
-
-
-class ChatMessageResponse(BaseModel):
-    """チャットメッセージレスポンス"""
-    id: str
-    user_id: str
-    is_user: bool
-    message: str
-    image_url: Optional[str] = None
-    chat_date: str
-    created_at: str
-
-
-class ChatResponseWithMessages(BaseModel):
-    """チャットレスポンス（メッセージ付き）- ai.py用"""
-    response: str
-    user_message: ChatMessageResponse
-    ai_message: ChatMessageResponse
+@router.get("/chat/history")
+async def get_chat_history(
+    chat_date: str = None,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    チャット履歴を取得
+    """
+    try:
+        supabase = get_supabase_admin()
+        
+        query = supabase.table("chat_messages").select("*").eq("user_id", current_user["id"])
+        
+        if chat_date:
+            query = query.eq("chat_date", chat_date)
+        
+        query = query.order("created_at", desc=False).limit(limit)
+        response = query.execute()
+        
+        return [ChatMessageResponse(**item) for item in response.data]
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
