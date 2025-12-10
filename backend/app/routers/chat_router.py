@@ -170,7 +170,7 @@ async def generate_advice(request: AdviceRequest):
 # 食事分析エンドポイント
 # ============================================================
 
-@router.post("/analyze-meal", response_model=MealAnalysisResponse)
+@router.post("/analyze-meal", response_model=DetailedMealAnalysis)  # ← 直接返す
 async def analyze_meal(request: MealAnalysisRequest):
     """
     食事を分析してカロリー・栄養素を推定（Proモデル使用）
@@ -183,7 +183,30 @@ async def analyze_meal(request: MealAnalysisRequest):
         else:
             raise HTTPException(status_code=400, detail="画像またはテキストが必要です")
         
-        return MealAnalysisResponse(analysis=analysis)
+        # DetailedMealAnalysisを辞書に変換して返す
+        return DetailedMealAnalysis(
+            food_items=[
+                FoodItem(
+                    name=item.name,
+                    amount=item.amount,
+                    calories=item.calories,
+                    protein=item.protein,
+                    fat=item.fat,
+                    carbs=item.carbs,
+                    sugar=getattr(item, 'sugar', 0),
+                    fiber=getattr(item, 'fiber', 0),
+                    sodium=getattr(item, 'sodium', 0)
+                ) for item in analysis.food_items
+            ],
+            total_calories=analysis.total_calories,
+            total_protein=analysis.total_protein,
+            total_fat=analysis.total_fat,
+            total_carbs=analysis.total_carbs,
+            total_sugar=analysis.total_sugar,
+            total_fiber=analysis.total_fiber,
+            total_sodium=analysis.total_sodium,
+            character_comment=analysis.character_comment
+        )
     except HTTPException:
         raise
     except Exception as e:
