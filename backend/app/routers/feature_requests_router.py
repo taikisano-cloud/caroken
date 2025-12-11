@@ -61,21 +61,26 @@ async def get_feature_requests(
         supabase = get_supabase_admin()
         user_id = current_user["id"]
         
-        # リクエスト一覧を取得
-        requests_response = supabase.table("feature_requests").select(
-            "*, profiles!feature_requests_author_id_fkey(display_name)"
-        ).order("votes", desc=True).execute()
+        # リクエスト一覧を取得（JOINなし）
+        requests_response = supabase.table("feature_requests").select("*").order("votes", desc=True).execute()
         
         # 現在のユーザーの投票を取得
         votes_response = supabase.table("feature_request_votes").select(
             "request_id"
         ).eq("user_id", user_id).execute()
         
-        voted_request_ids = {v["request_id"] for v in votes_response.data}
+        voted_request_ids = {v["request_id"] for v in (votes_response.data or [])}
         
         result = []
-        for req in requests_response.data:
-            author_name = req.get("profiles", {}).get("display_name", "匿名")
+        for req in (requests_response.data or []):
+            # 作者名を個別に取得
+            author_name = "匿名"
+            try:
+                profile_response = supabase.table("profiles").select("display_name").eq("id", req["author_id"]).execute()
+                if profile_response.data and len(profile_response.data) > 0:
+                    author_name = profile_response.data[0].get("display_name") or "匿名"
+            except:
+                pass
             
             result.append(FeatureRequestResponse(
                 id=req["id"],
@@ -83,8 +88,8 @@ async def get_feature_requests(
                 author_name=author_name,
                 title=req["title"],
                 description=req["description"],
-                votes=req["votes"],
-                status=req["status"],
+                votes=req["votes"] or 0,
+                status=req["status"] or "pending",
                 has_voted=req["id"] in voted_request_ids,
                 is_owner=req["author_id"] == user_id,
                 comments=[],
@@ -191,6 +196,10 @@ async def create_feature_request(
         }
         
         req_response = supabase.table("feature_requests").insert(req_data).execute()
+        
+        if not req_response.data or len(req_response.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create request")
+        
         req = req_response.data[0]
         
         # 作成者の投票を追加
@@ -200,11 +209,13 @@ async def create_feature_request(
         }).execute()
         
         # 作成者の名前を取得
-        profile_response = supabase.table("profiles").select(
-            "display_name"
-        ).eq("id", user_id).single().execute()
-        
-        author_name = profile_response.data.get("display_name", "匿名") if profile_response.data else "匿名"
+        author_name = "あなた"
+        try:
+            profile_response = supabase.table("profiles").select("display_name").eq("id", user_id).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                author_name = profile_response.data[0].get("display_name") or "あなた"
+        except:
+            pass
         
         return FeatureRequestResponse(
             id=req["id"],
@@ -212,8 +223,8 @@ async def create_feature_request(
             author_name=author_name,
             title=req["title"],
             description=req["description"],
-            votes=req["votes"],
-            status=req["status"],
+            votes=req["votes"] or 1,
+            status=req["status"] or "pending",
             has_voted=True,
             is_owner=True,
             comments=[],
@@ -221,6 +232,8 @@ async def create_feature_request(
             updated_at=req["updated_at"]
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error creating feature request: {e}")
         raise HTTPException(
