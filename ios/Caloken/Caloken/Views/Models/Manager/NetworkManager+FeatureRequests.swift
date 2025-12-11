@@ -62,8 +62,10 @@ struct VoteResponse: Codable {
 
 extension NetworkManager {
     
+    
     /// 全ての機能リクエストを取得
     func getFeatureRequests() async throws -> [FeatureRequestAPI] {
+        
         let endpoint = "\(baseURL)/feature-requests"
         
         print("📋 Get Feature Requests: \(endpoint)")
@@ -77,6 +79,8 @@ extension NetworkManager {
         
         // 認証トークンを追加
         if let token = UserDefaults.standard.string(forKey: "supabase_access_token") {
+            print("🔑 Token prefix: \(String(token.prefix(50)))...")  // ← 追加
+
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -95,6 +99,7 @@ extension NetworkManager {
         let decoder = JSONDecoder()
         return try decoder.decode([FeatureRequestAPI].self, from: data)
     }
+    
     
     /// 特定の機能リクエストを取得（コメント含む）
     func getFeatureRequest(id: String) async throws -> FeatureRequestAPI {

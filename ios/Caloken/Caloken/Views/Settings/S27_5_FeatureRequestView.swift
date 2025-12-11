@@ -143,14 +143,19 @@ struct S27_5_FeatureRequestView: View {
         isLoading = true
         errorMessage = nil
         
+        let token = UserDefaults.standard.string(forKey: "supabase_access_token")
+        print("🔑 Token check: \(token != nil ? "exists (\(token!.count) chars)" : "NOT FOUND")")
+        
         Task {
             do {
                 let apiRequests = try await NetworkManager.shared.getFeatureRequests()
+                print("✅ Got \(apiRequests.count) requests")  // ← 追加
                 await MainActor.run {
                     requests = apiRequests.map { FeatureRequestLocal(from: $0) }
                     isLoading = false
                 }
             } catch {
+                print("❌ Error: \(error)")  // ← 追加：エラー詳細
                 await MainActor.run {
                     errorMessage = "データの読み込みに失敗しました"
                     isLoading = false

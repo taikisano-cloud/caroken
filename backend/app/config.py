@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str = Field(validation_alias="SUPABASE_ANON_KEY")  # anon key
     supabase_service_role_key: str
+    supabase_jwt_secret: str
     
     # Gemini AI
     gemini_api_key: str
