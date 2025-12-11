@@ -207,7 +207,7 @@ struct MetricsTabView: View {
     }
 }
 
-// MARK: - カロリー + アドバイスカード（食事記録時に更新）
+// MARK: - カロリー + アドバイスカード（時間帯・食事タイプ対応）
 struct CalorieWithAdviceCard: View {
     @Binding var selectedDate: Date
     @Binding var showNutritionGoal: Bool
@@ -218,13 +218,27 @@ struct CalorieWithAdviceCard: View {
     
     @State private var adviceText: String = "今日も一緒にがんばろうにゃ！🐱"
     @State private var isLoadingAdvice: Bool = false
-    @State private var lastMealCount: Int = 0  // ✅ 食事数を追跡
+    @State private var lastMealCount: Int = 0
     
     var baseTarget: Int { profileManager.calorieGoal }
     var exerciseBonus: Int { exerciseLogsManager.totalCaloriesBurned(for: selectedDate) }
     var target: Int { baseTarget + exerciseBonus }
     var current: Int { logsManager.totalCalories(for: selectedDate) }
     var mealCount: Int { logsManager.logs(for: selectedDate).count }
+    
+    // 各食事タイプのカウント
+    var breakfastCount: Int {
+        logsManager.logs(for: selectedDate).filter { $0.mealType == .breakfast }.count
+    }
+    var lunchCount: Int {
+        logsManager.logs(for: selectedDate).filter { $0.mealType == .lunch }.count
+    }
+    var dinnerCount: Int {
+        logsManager.logs(for: selectedDate).filter { $0.mealType == .dinner }.count
+    }
+    var snackCount: Int {
+        logsManager.logs(for: selectedDate).filter { $0.mealType == .snack }.count
+    }
     
     var progressRatio: Double {
         guard target > 0 else { return 0 }
@@ -374,14 +388,12 @@ struct CalorieWithAdviceCard: View {
             lastMealCount = mealCount
             fetchAdvice()
         }
-        // ✅ 食事数が変わったらアドバイスを更新
         .onChange(of: mealCount) { oldCount, newCount in
             if newCount != lastMealCount {
                 lastMealCount = newCount
                 fetchAdvice()
             }
         }
-        // ✅ 食事ログ追加通知を受け取ったら更新
         .onReceive(NotificationCenter.default.publisher(for: .mealLogAdded)) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 fetchAdvice()
@@ -394,17 +406,16 @@ struct CalorieWithAdviceCard: View {
         }
     }
     
-    // MARK: - APIからアドバイスを取得（Flashモデル使用 - 高速）
+    // MARK: - APIからアドバイスを取得（時間帯・食事タイプ対応）
     private func fetchAdvice() {
         isLoadingAdvice = true
         
         Task {
             do {
                 let nutrients = logsManager.totalNutrients(for: selectedDate)
-                let currentMealCount = logsManager.logs(for: selectedDate).count
                 let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }.joined(separator: "、")
                 
-                // ✅ /v1/advice エンドポイントはFlashモデルを使用（高速）
+                // 時間帯と各食事タイプのカウントを送信
                 let advice = try await NetworkManager.shared.fetchHomeAdvice(
                     todayCalories: current,
                     goalCalories: target,
@@ -412,7 +423,11 @@ struct CalorieWithAdviceCard: View {
                     todayFat: nutrients.fat,
                     todayCarbs: nutrients.carbs,
                     todayMeals: todayMeals,
-                    mealCount: currentMealCount
+                    mealCount: mealCount,
+                    breakfastCount: breakfastCount,
+                    lunchCount: lunchCount,
+                    dinnerCount: dinnerCount,
+                    snackCount: snackCount
                 )
                 
                 await MainActor.run {
@@ -428,17 +443,55 @@ struct CalorieWithAdviceCard: View {
         }
     }
     
-    // MARK: - ローカルフォールバック
+    // MARK: - ローカルフォールバック（時間帯対応）
     private func generateLocalAdvice() -> String {
+        let hour = Calendar.current.component(.hour, from: Date())
         let nutrients = logsManager.totalNutrients(for: selectedDate)
-        if current == 0 {
-            return "今日はまだ何も食べてないにゃ🐱\n何か記録してみよう！"
-        } else if nutrients.protein < 50 {
-            return "今日はタンパク質が不足気味だにゃ🐱夕食でお肉か魚を食べるといいかも！"
-        } else if current > target {
-            return "今日はカロリーオーバーだにゃ😅明日は少し控えめにしよう！"
-        } else {
-            return "いい感じだにゃ🐱バランスよく食べられてるよ！この調子✨"
+        
+        // 朝（〜10時）
+        if hour < 10 {
+            if breakfastCount == 0 {
+                return "おはようにゃ🌅 朝ごはんまだみたいだにゃ！軽くでもいいから食べてほしいにゃ🍳"
+            } else {
+                return "朝ごはん食べたんだにゃ！いいスタートだにゃ🐱✨"
+            }
+        }
+        // 昼（10〜14時）
+        else if hour < 14 {
+            if lunchCount == 0 && breakfastCount == 0 {
+                return "お昼だにゃ🌞 まだ何も食べてないみたい...お腹空いてない？🐱"
+            } else if lunchCount == 0 {
+                return "お昼の時間だにゃ🍱 ランチはどうするにゃ？"
+            } else {
+                return "ランチ完了だにゃ！午後もがんばろうにゃ💪"
+            }
+        }
+        // 夕方（14〜18時）
+        else if hour < 18 {
+            if current == 0 {
+                return "夕方になったにゃ...まだ何も食べてないみたい😿 大丈夫にゃ？"
+            } else if nutrients.protein < 50 {
+                return "たんぱく質がちょっと少ないかも🐱 夕食でお肉かお魚を食べるといいにゃ💪"
+            } else {
+                let remaining = target - current
+                if remaining > 500 {
+                    return "あと\(remaining)kcalくらい食べられるにゃ🍽️ 夕食が楽しみだにゃ！"
+                } else {
+                    return "いい感じに進んでるにゃ！夕食は軽めがおすすめだにゃ🐱"
+                }
+            }
+        }
+        // 夜（18時〜）
+        else {
+            if dinnerCount == 0 && current > 0 {
+                return "夜だにゃ🌙 夕食はまだ？それとも今日は軽めにするにゃ？"
+            } else if current > target {
+                return "今日はちょっとオーバーしちゃったにゃ😅 明日は少し控えめにしようにゃ！"
+            } else if dinnerCount > 0 {
+                return "今日もお疲れ様だにゃ🌙 いい感じに食べられたにゃ✨"
+            } else {
+                return "今日も一日お疲れ様にゃ🐱 ゆっくり休んでにゃ💤"
+            }
         }
     }
 }
@@ -475,7 +528,6 @@ struct NutritionCard: View {
                     NutrientCardCompact(current: detailedNutrients.carbs, target: profileManager.carbGoal, color: Color.orange.opacity(0.8), icon: "🍚", name: "炭水化物")
                 }
                 HStack(spacing: 6) {
-                    // 糖分、食物繊維、ナトリウムの実際の値を表示
                     NutrientCardCompact(current: detailedNutrients.sugar, target: profileManager.sugarGoal, color: .purple, icon: "🍬", name: "糖分")
                     NutrientCardCompact(current: detailedNutrients.fiber, target: profileManager.fiberGoal, color: Color.green, icon: "🌾", name: "食物繊維")
                     NutrientCardCompact(current: detailedNutrients.sodium, target: profileManager.sodiumGoal, color: Color(UIColor.systemGray), icon: "🧂", name: "ナトリウム", unit: "mg")

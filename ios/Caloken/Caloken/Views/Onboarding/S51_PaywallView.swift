@@ -5,6 +5,7 @@ import AVFoundation
 struct S51_PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     
     // ログイン状態を@AppStorageで管理
     @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
@@ -14,6 +15,8 @@ struct S51_PaywallView: View {
     @State private var navigateToTerms: Bool = false
     @State private var navigateToPrivacy: Bool = false
     @State private var showPurchaseError: Bool = false
+    @State private var errorMessage: String = ""
+    @State private var hasAutoStartedPurchase: Bool = false
     
     // 開発モード（本番リリース前にfalseに変更）
     private let isDevelopment = true
@@ -29,9 +32,6 @@ struct S51_PaywallView: View {
                 if isDevelopment {
                     HStack {
                         Spacer()
-                        Button("スキップ") {
-                            completePurchase()
-                        }
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
                         .padding(.trailing, 20)
@@ -39,47 +39,22 @@ struct S51_PaywallView: View {
                     }
                 }
                 
-                // ヘッダー（コンパクト）
-                VStack(spacing: 6) {
-                    Text("目標達成を加速させるために\nカロ研をアンロックしましょう")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(2)
-                    
-                    // 無料トライアルバナー
-                    HStack(spacing: 6) {
-                        Image(systemName: "gift.fill")
-                            .foregroundColor(.orange)
-                            .font(.system(size: 12))
-                        Text("7日間無料でお試し")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.orange)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.15))
-                    .cornerRadius(14)
-                    
-                    // 特典
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(.green)
-                            .font(.system(size: 10))
-                        Text("契約の縛りなし - いつでもキャンセル可能")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.top, isDevelopment ? 0 : 16)
+                // ヘッダー（シンプルに）
+                Text("目標達成を加速させるために\nカロ研をアンロックしましょう")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .padding(.top, isDevelopment ? 4 : 16)
                 
-                // iPhoneモックアップ（動画付き）
-                PaywallVideoMockupView()
-                    .padding(.top, 8)
+                Spacer()
                 
-                Spacer(minLength: 20)
+                // iPhoneモックアップ（少し小さめ）
+                PaywallPhoneMockupView()
                 
-                // プラン選択（コンパクト）
+                Spacer()
+                
+                // プラン選択
                 VStack(spacing: 8) {
                     // 年額プラン
                     PaywallCompactPlanCard(
@@ -99,7 +74,7 @@ struct S51_PaywallView: View {
                 }
                 .padding(.horizontal, 20)
                 
-                Spacer(minLength: 16)
+                Spacer().frame(height: 16)
                 
                 // 続けるボタン
                 Button {
@@ -175,7 +150,28 @@ struct S51_PaywallView: View {
         .alert("購入エラー", isPresented: $showPurchaseError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("購入処理中にエラーが発生しました。もう一度お試しください。")
+            Text(errorMessage)
+        }
+        .onAppear {
+            // 画面表示時に自動で年額プランの決済を開始
+            if !hasAutoStartedPurchase {
+                hasAutoStartedPurchase = true
+                
+                // 少し遅延させてUIが表示されてから決済ダイアログを出す
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    // 既に課金済みかチェック
+                    Task {
+                        await subscriptionManager.checkSubscriptionStatus()
+                        if subscriptionManager.isSubscribed {
+                            print("✅ Already subscribed, going to home")
+                            completePurchase()
+                        } else {
+                            // 未課金なら自動で年額プラン購入を開始
+                            purchase()
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -192,70 +188,39 @@ struct S51_PaywallView: View {
         
         Task {
             do {
-                let productIds = [selectedPlan.productId]
-                print("💳 Fetching products: \(productIds)")
-                let products = try await Product.products(for: productIds)
-                print("💳 Products found: \(products.count)")
+                let success = try await subscriptionManager.purchase(productId: selectedPlan.productId)
                 
-                if let product = products.first {
-                    print("💳 Purchasing product: \(product.displayName) - \(product.displayPrice)")
-                    let result = try await product.purchase()
-                    
-                    switch result {
-                    case .success(let verification):
-                        print("💳 Purchase success, verifying...")
-                        switch verification {
-                        case .verified(_):
-                            print("✅ Purchase verified!")
-                            await MainActor.run {
-                                isLoading = false
-                                completePurchase()
-                            }
-                        case .unverified(_, _):
-                            print("❌ Purchase unverified")
-                            await MainActor.run {
-                                isLoading = false
-                                showPurchaseError = true
-                            }
-                        }
-                    case .userCancelled:
-                        print("🚫 Purchase cancelled by user")
-                        await MainActor.run {
-                            isLoading = false
-                        }
-                    case .pending:
-                        print("⏳ Purchase pending")
-                        await MainActor.run {
-                            isLoading = false
-                        }
-                    @unknown default:
-                        print("❓ Unknown purchase result")
-                        await MainActor.run {
-                            isLoading = false
-                        }
+                await MainActor.run {
+                    isLoading = false
+                    if success {
+                        completePurchase()
                     }
-                } else {
-                    print("⚠️ No products found for ID: \(selectedPlan.productId)")
-                    await MainActor.run {
-                        isLoading = false
-                        // 商品が見つからない場合は開発中としてスキップ
-                        if isDevelopment {
-                            print("🔧 Development mode: skipping purchase")
-                            completePurchase()
-                        } else {
-                            showPurchaseError = true
-                        }
+                }
+            } catch SubscriptionError.productNotFound {
+                await MainActor.run {
+                    isLoading = false
+                    print("⚠️ Product not found: \(selectedPlan.productId)")
+                    
+                    // 開発モードではスキップ
+                    if isDevelopment {
+                        print("🔧 Development mode: skipping purchase")
+                        completePurchase()
+                    } else {
+                        errorMessage = "商品が見つかりませんでした"
+                        showPurchaseError = true
                     }
                 }
             } catch {
-                print("❌ Purchase error: \(error)")
                 await MainActor.run {
                     isLoading = false
-                    // 開発中はエラーでもスキップ可能
+                    print("❌ Purchase error: \(error)")
+                    
+                    // 開発モードではスキップ
                     if isDevelopment {
                         print("🔧 Development mode: skipping after error")
                         completePurchase()
                     } else {
+                        errorMessage = error.localizedDescription
                         showPurchaseError = true
                     }
                 }
@@ -265,33 +230,29 @@ struct S51_PaywallView: View {
     
     private func restorePurchases() {
         isLoading = true
+        print("🔄 Restoring purchases...")
         
         Task {
             do {
-                for await result in Transaction.currentEntitlements {
-                    if case .verified(let transaction) = result {
-                        if transaction.productID == PaywallSubscriptionPlan.yearly.productId ||
-                           transaction.productID == PaywallSubscriptionPlan.monthly.productId {
-                            await MainActor.run {
-                                isLoading = false
-                                completePurchase()
-                            }
-                            return
-                        }
-                    }
-                }
+                let restored = try await subscriptionManager.restorePurchases()
                 
                 await MainActor.run {
                     isLoading = false
-                    // 復元するものがない場合もスキップ（開発中）
-                    if isDevelopment {
+                    if restored {
+                        print("✅ Purchases restored!")
                         completePurchase()
+                    } else {
+                        print("⚠️ No purchases to restore")
+                        // 開発モードではスキップ
+                        if isDevelopment {
+                            completePurchase()
+                        }
                     }
                 }
             } catch {
                 await MainActor.run {
-                    print("Restore error: \(error)")
                     isLoading = false
+                    print("❌ Restore error: \(error)")
                 }
             }
         }
@@ -407,26 +368,34 @@ struct PaywallCompactPlanCard: View {
     }
 }
 
-// MARK: - 動画付きiPhoneモックアップ
-struct PaywallVideoMockupView: View {
-    @Environment(\.colorScheme) private var colorScheme
-    
+// MARK: - iPhone Mockup with Video (黒フレーム・少し小さめ)
+struct PaywallPhoneMockupView: View {
     var body: some View {
         ZStack {
-            // iPhone フレーム
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.orange)
-                .frame(width: 150, height: 300)
-                .shadow(color: .orange.opacity(0.3), radius: 12, x: 0, y: 6)
-            
-            RoundedRectangle(cornerRadius: 20)
+            // 外側フレーム（黒）
+            RoundedRectangle(cornerRadius: 40)
                 .fill(Color.black)
-                .frame(width: 142, height: 292)
+                .frame(width: 240, height: 480)
+                .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
             
-            // 動画コンテンツ
-            PaywallVideoPlayerView()
-                .frame(width: 136, height: 286)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+            // 内側フレーム（ダークグレー - ベゼル）
+            RoundedRectangle(cornerRadius: 37)
+                .fill(Color(white: 0.15))
+                .frame(width: 232, height: 472)
+            
+            // 画面部分
+            ZStack {
+                Color(UIColor.systemBackground)
+                PaywallVideoPlayerView()
+            }
+            .frame(width: 218, height: 458)
+            .clipShape(RoundedRectangle(cornerRadius: 33))
+            
+            // ダイナミックアイランド
+            Capsule()
+                .fill(Color.black)
+                .frame(width: 76, height: 24)
+                .offset(y: -215)
         }
     }
 }
@@ -434,16 +403,16 @@ struct PaywallVideoMockupView: View {
 // MARK: - 動画プレイヤー
 struct PaywallVideoPlayerView: View {
     @State private var player: AVPlayer?
+    @State private var isVideoReady = false
     
     var body: some View {
         ZStack {
-            // フォールバック背景
-            Color.black
-            
             if let player = player {
                 PaywallPlayerRepresentable(player: player)
-            } else {
-                // 動画がない場合のフォールバック
+                    .opacity(isVideoReady ? 1 : 0)
+            }
+            
+            if !isVideoReady {
                 PaywallStaticContent()
             }
         }
@@ -460,12 +429,12 @@ struct PaywallVideoPlayerView: View {
         var videoURL: URL?
         
         // Bundle内の動画ファイルを探す
-        if let bundleURL = Bundle.main.url(forResource: "OnboardingTest", withExtension: "mp4") {
+        if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
             videoURL = bundleURL
             print("✅ Paywall: Video found in Bundle")
         }
         // Assets Catalogから読み込む
-        else if let asset = NSDataAsset(name: "OnboardingTest") {
+        else if let asset = NSDataAsset(name: "onboarding") {
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("PaywallVideo.mp4")
             do {
                 if FileManager.default.fileExists(atPath: tempURL.path) {
@@ -496,7 +465,13 @@ struct PaywallVideoPlayerView: View {
             }
             
             self.player = newPlayer
-            newPlayer.play()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                newPlayer.play()
+                withAnimation(.easeIn(duration: 0.3)) {
+                    isVideoReady = true
+                }
+            }
         }
     }
 }
@@ -509,7 +484,7 @@ struct PaywallPlayerRepresentable: UIViewRepresentable {
         let view = PaywallPlayerUIView()
         view.playerLayer.player = player
         view.playerLayer.videoGravity = .resizeAspectFill
-        view.backgroundColor = .black
+        view.backgroundColor = .clear
         return view
     }
     
@@ -529,94 +504,81 @@ class PaywallPlayerUIView: UIView {
 // MARK: - 静的フォールバックコンテンツ
 struct PaywallStaticContent: View {
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             // ステータスバー
             HStack {
                 Text("22:22")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 10, weight: .medium))
                 Spacer()
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     Image(systemName: "cellularbars")
                     Image(systemName: "wifi")
                     Image(systemName: "battery.100")
                 }
-                .font(.system(size: 8))
-                .foregroundColor(.white)
+                .font(.system(size: 10))
+                .foregroundColor(.primary)
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 4)
+            .padding(.horizontal, 16)
+            .padding(.top, 38)
             
             // ヘッダー
             HStack {
                 Text("🐱")
-                    .font(.system(size: 12))
+                    .font(.system(size: 16))
                 Text("カロ研")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.orange)
                 Spacer()
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 8))
-                    .foregroundColor(.gray)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
             
             Spacer()
             
-            // カロリーリング
+            // メインコンテンツ
             ZStack {
                 Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 6)
-                    .frame(width: 50, height: 50)
+                    .stroke(Color(UIColor.systemGray4), lineWidth: 8)
+                    .frame(width: 80, height: 80)
                 Circle()
                     .trim(from: 0, to: 0.4)
-                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .frame(width: 50, height: 50)
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .frame(width: 80, height: 80)
                     .rotationEffect(.degrees(-90))
-                
-                VStack(spacing: 0) {
-                    Text("850")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("/2200")
-                        .font(.system(size: 6))
-                        .foregroundColor(.gray)
-                }
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 22))
+                    .foregroundColor(.orange)
             }
             
-            // メッセージ
-            HStack(spacing: 4) {
-                Text("🐱")
-                    .font(.system(size: 10))
-                Text("いい感じだにゃ！")
-                    .font(.system(size: 8))
-                    .foregroundColor(.white)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Color.gray.opacity(0.3))
-            .cornerRadius(10)
+            Text("850 / 2200 kcal")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.primary)
+                .padding(.top, 10)
             
             Spacer()
             
             // タブバー
             HStack {
+                Spacer()
                 VStack(spacing: 2) {
                     Image(systemName: "house.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 15))
                     Text("ホーム")
-                        .font(.system(size: 6))
+                        .font(.system(size: 8))
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.orange)
                 
                 Spacer()
                 
                 Circle()
                     .fill(Color.orange)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 36, height: 36)
                     .overlay(
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
                     )
                 
@@ -624,16 +586,16 @@ struct PaywallStaticContent: View {
                 
                 VStack(spacing: 2) {
                     Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 15))
                     Text("進捗")
-                        .font(.system(size: 6))
+                        .font(.system(size: 8))
                 }
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
+                
+                Spacer()
             }
-            .padding(.horizontal, 16)
             .padding(.bottom, 6)
         }
-        .background(Color(red: 0.1, green: 0.1, blue: 0.1))
     }
 }
 

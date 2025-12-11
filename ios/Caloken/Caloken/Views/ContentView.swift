@@ -3,6 +3,8 @@ import Combine
 
 // MARK: - ContentView
 struct ContentView: View {
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    
     @State private var selectedTab: Int = 0
     @State private var showRecordMenu: Bool = false
     @State private var showToast: Bool = false
@@ -15,9 +17,58 @@ struct ContentView: View {
     @State private var navigateToSavedMeals: Bool = false
     @State private var navigateToWeightRecord: Bool = false
     
+    @State private var hasCheckedSubscription: Bool = false
+    @State private var showPaywall: Bool = false
+    
     private let tabBarHeight: CGFloat = 90
     
     var body: some View {
+        Group {
+            if !hasCheckedSubscription {
+                // 課金状態チェック中
+                loadingView
+            } else if !subscriptionManager.isSubscribed {
+                // 未課金 → Paywall表示
+                NavigationStack {
+                    S51_PaywallView()
+                }
+            } else {
+                // 課金済み → メインコンテンツ表示
+                mainNavigationView
+            }
+        }
+        .task {
+            // 起動時に課金状態をチェック
+            await subscriptionManager.checkSubscriptionStatus()
+            hasCheckedSubscription = true
+        }
+        // 課金状態の変化を監視
+        .onChange(of: subscriptionManager.isSubscribed) { _, newValue in
+            if !newValue && hasCheckedSubscription {
+                // 課金が切れた場合
+                print("⚠️ Subscription expired")
+            }
+        }
+    }
+    
+    // MARK: - ローディングビュー
+    private var loadingView: some View {
+        ZStack {
+            Color(UIColor.systemBackground)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.5)
+                Text("確認中...")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // MARK: - メインナビゲーション
+    private var mainNavigationView: some View {
         NavigationStack {
             ZStack {
                 // メインコンテンツ

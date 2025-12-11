@@ -2,40 +2,21 @@ import SwiftUI
 import AVKit
 
 struct S1_OnboardingStartView: View {
-    @State private var videoLoadError: Bool = false
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // 背景（動画またはフォールバック）
-                if videoLoadError {
-                    // フォールバック背景
-                    Color(UIColor.systemBackground)
-                        .ignoresSafeArea()
-                } else {
-                    // 背景動画
-                    VideoPlayerView(videoName: "OnboardingTest", onError: {
-                        videoLoadError = true
-                    })
+                // 背景色
+                Color(UIColor.systemBackground)
                     .ignoresSafeArea()
-                }
-                
-                // オーバーレイ（グラデーション）- 動画がある場合のみ
-                if !videoLoadError {
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.2),
-                            Color.black.opacity(0.1),
-                            Color.black.opacity(0.6)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                }
                 
                 // コンテンツ
-                VStack {
+                VStack(spacing: 0) {
+                    Spacer()
+                    
+                    // iPhone モックアップ
+                    WelcomePhoneMockupView()
+                    
                     Spacer()
                     
                     // ボタンエリア
@@ -43,8 +24,8 @@ struct S1_OnboardingStartView: View {
                         // キャッチコピー
                         Text("カロリー管理を手軽に")
                             .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(videoLoadError ? .primary : .white)
-                            .padding(.bottom, 20)
+                            .foregroundColor(.primary)
+                            .padding(.bottom, 16)
                         
                         // はじめるボタン
                         NavigationLink {
@@ -71,7 +52,7 @@ struct S1_OnboardingStartView: View {
                         } label: {
                             Text("すでにアカウントをお持ちの方")
                                 .font(.system(size: 15))
-                                .foregroundColor(videoLoadError ? .secondary : .white.opacity(0.9))
+                                .foregroundColor(.secondary)
                                 .underline()
                         }
                         .padding(.top, 8)
@@ -85,122 +66,222 @@ struct S1_OnboardingStartView: View {
     }
 }
 
-// MARK: - ビデオプレイヤー（ループ再生）
-struct VideoPlayerView: UIViewRepresentable {
-    let videoName: String
-    var onError: (() -> Void)?
+// MARK: - iPhone Mockup with Video (黒フレーム)
+struct WelcomePhoneMockupView: View {
+    var body: some View {
+        ZStack {
+            // 外側フレーム（黒）
+            RoundedRectangle(cornerRadius: 45)
+                .fill(Color.black)
+                .frame(width: 280, height: 560)
+                .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+            
+            // 内側フレーム（ダークグレー - ベゼル）
+            RoundedRectangle(cornerRadius: 42)
+                .fill(Color(white: 0.15))
+                .frame(width: 272, height: 552)
+            
+            // 画面部分
+            ZStack {
+                Color(UIColor.systemBackground)
+                WelcomeVideoPlayerView()
+            }
+            .frame(width: 256, height: 536)
+            .clipShape(RoundedRectangle(cornerRadius: 38))
+            
+            // ダイナミックアイランド
+            Capsule()
+                .fill(Color.black)
+                .frame(width: 90, height: 28)
+                .offset(y: -252)
+        }
+    }
+}
+
+// MARK: - Video Player for Welcome
+struct WelcomeVideoPlayerView: View {
+    @State private var player: AVPlayer?
+    @State private var isVideoReady = false
+    
+    var body: some View {
+        ZStack {
+            if let player = player {
+                WelcomeVideoPlayer(player: player)
+                    .opacity(isVideoReady ? 1 : 0)
+            }
+            
+            if !isVideoReady {
+                WelcomeStaticMockupContent()
+            }
+        }
+        .onAppear { setupPlayer() }
+        .onDisappear {
+            player?.pause()
+            player = nil
+        }
+    }
+    
+    private func setupPlayer() {
+        var videoURL: URL?
+        
+        // Bundle内のファイルを探す
+        if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
+            videoURL = bundleURL
+            print("✅ Welcome: Video found in Bundle")
+        } else if let asset = NSDataAsset(name: "onboarding") {
+            // Assets Catalogから取得
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("WelcomeOnboarding.mp4")
+            do {
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
+                }
+                try asset.data.write(to: tempURL)
+                videoURL = tempURL
+                print("✅ Welcome: Video loaded from Assets")
+            } catch {
+                print("❌ Welcome: Failed to write video: \(error)")
+            }
+        }
+        
+        if let url = videoURL {
+            let newPlayer = AVPlayer(url: url)
+            newPlayer.isMuted = true
+            
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: newPlayer.currentItem,
+                queue: .main
+            ) { _ in
+                newPlayer.seek(to: .zero)
+                newPlayer.play()
+            }
+            
+            self.player = newPlayer
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                newPlayer.play()
+                withAnimation(.easeIn(duration: 0.3)) {
+                    isVideoReady = true
+                }
+            }
+        }
+    }
+}
+
+struct WelcomeVideoPlayer: UIViewRepresentable {
+    let player: AVPlayer
     
     func makeUIView(context: Context) -> UIView {
-        let view = LoopingVideoPlayerUIView(videoName: videoName, onError: onError)
+        let view = WelcomePlayerUIView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = .resizeAspectFill
+        view.backgroundColor = .clear
         return view
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
-class LoopingVideoPlayerUIView: UIView {
-    private var playerLayer: AVPlayerLayer?
-    private var player: AVPlayer?
-    private var onError: (() -> Void)?
-    
-    init(videoName: String, onError: (() -> Void)?) {
-        self.onError = onError
-        super.init(frame: .zero)
-        backgroundColor = UIColor.systemBackground
-        setupPlayer(videoName: videoName)
-    }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    private func setupPlayer(videoName: String) {
-        var videoURL: URL?
-        
-        // 1. まずBundle内のファイルを探す（複数の拡張子を試す）
-        let extensions = ["mp4", "mov", "m4v", "MP4", "MOV", "M4V"]
-        for ext in extensions {
-            if let url = Bundle.main.url(forResource: videoName, withExtension: ext) {
-                videoURL = url
-                print("✅ Video found in Bundle: \(videoName).\(ext)")
-                break
-            }
-        }
-        
-        // 2. Assets Catalogから動画を取得（iOS 17+対応）
-        if videoURL == nil {
-            // Assets内のData Setとして動画がある場合
-            if let asset = NSDataAsset(name: videoName) {
-                // 一時ファイルに書き出して再生
-                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(videoName).mp4")
-                do {
-                    // 既存のファイルがあれば削除
-                    if FileManager.default.fileExists(atPath: tempURL.path) {
-                        try FileManager.default.removeItem(at: tempURL)
-                    }
-                    try asset.data.write(to: tempURL)
-                    videoURL = tempURL
-                    print("✅ Video loaded from Assets: \(videoName)")
-                } catch {
-                    print("❌ Failed to write video from Assets: \(error)")
+class WelcomePlayerUIView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+// MARK: - Static Mockup Content (フォールバック用)
+struct WelcomeStaticMockupContent: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            // ステータスバー
+            HStack {
+                Text("22:22")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "cellularbars")
+                    Image(systemName: "wifi")
+                    Image(systemName: "battery.100")
                 }
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
             }
-        }
-        
-        // 3. ファイルが見つからない場合
-        guard let url = videoURL else {
-            print("❌ Video file not found: \(videoName)")
-            print("   - Checked Bundle for: \(extensions.map { "\(videoName).\($0)" }.joined(separator: ", "))")
-            print("   - Checked Assets Catalog")
-            DispatchQueue.main.async {
-                self.onError?()
+            .padding(.horizontal, 20)
+            .padding(.top, 45)
+            
+            // ヘッダー
+            HStack {
+                Text("🐱")
+                    .font(.system(size: 20))
+                Text("カロ研")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.orange)
+                Spacer()
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
             }
-            return
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            
+            Spacer()
+            
+            // メインコンテンツ
+            ZStack {
+                Circle()
+                    .stroke(Color(UIColor.systemGray4), lineWidth: 10)
+                    .frame(width: 100, height: 100)
+                Circle()
+                    .trim(from: 0, to: 0.4)
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .frame(width: 100, height: 100)
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.orange)
+            }
+            
+            Text("850 / 2200 kcal")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.primary)
+                .padding(.top, 12)
+            
+            Spacer()
+            
+            // タブバー
+            HStack {
+                Spacer()
+                VStack(spacing: 3) {
+                    Image(systemName: "house.fill")
+                        .font(.system(size: 18))
+                    Text("ホーム")
+                        .font(.system(size: 9))
+                }
+                .foregroundColor(.orange)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+                
+                Spacer()
+                
+                VStack(spacing: 3) {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 18))
+                    Text("進捗")
+                        .font(.system(size: 9))
+                }
+                .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            .padding(.bottom, 12)
         }
-        
-        // AVPlayerを使用
-        let playerItem = AVPlayerItem(url: url)
-        player = AVPlayer(playerItem: playerItem)
-        player?.isMuted = true
-        
-        playerLayer = AVPlayerLayer(player: player)
-        playerLayer?.videoGravity = .resizeAspectFill
-        
-        if let playerLayer = playerLayer {
-            layer.addSublayer(playerLayer)
-        }
-        
-        // ループ再生の設定
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            self?.player?.seek(to: .zero)
-            self?.player?.play()
-        }
-        
-        // エラー監視
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemFailedToPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            print("❌ Video playback failed")
-            self?.onError?()
-        }
-        
-        player?.play()
-    }
-    
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        playerLayer?.frame = bounds
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-        player?.pause()
     }
 }
 

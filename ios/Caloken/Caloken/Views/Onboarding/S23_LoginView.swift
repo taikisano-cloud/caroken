@@ -6,6 +6,10 @@ struct S23_LoginView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var authService = AuthService.shared
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    
+    // ログイン状態を@AppStorageで管理（課金済みでホームに入れる状態）
+    @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
     
     @State private var navigateToPaywall: Bool = false
     @State private var navigateToTerms: Bool = false
@@ -22,10 +26,11 @@ struct S23_LoginView: View {
     
     var body: some View {
         ZStack {
-            // 背景を全画面に
-            Color(UIColor.systemGroupedBackground)
-                .ignoresSafeArea(.all)
+            // 背景色
+            Color(UIColor.systemBackground)
+                .ignoresSafeArea()
             
+            // コンテンツレイヤー
             VStack(spacing: 0) {
                 // カスタム戻るボタン
                 HStack {
@@ -39,75 +44,41 @@ struct S23_LoginView: View {
                             .background(Color(UIColor.systemGray5))
                             .clipShape(Circle())
                     }
-                    
                     Spacer()
-            
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
+                .padding(.bottom, 8)
                 
-                // iPhone モックアップ
+                Spacer()
+                
+                // iPhone モックアップ - 中央に配置
                 LoginPhoneMockupView()
-                    .padding(.top, 20)
+                    .padding(.bottom, 8)
                 
-                Spacer(minLength: 0)
+                Spacer()
                 
-                // ログインセクション
-                VStack(spacing: 20) {
+                // ログインセクション - 画面下部に固定
+                VStack(spacing: 16) {
                     // ドラッグインジケーター
                     RoundedRectangle(cornerRadius: 2.5)
                         .fill(Color(UIColor.systemGray3))
                         .frame(width: 36, height: 5)
-                        .padding(.top, 10)
+                        .padding(.top, 12)
                     
                     socialLoginButtons
+                        .padding(.top, 4)
                     
                     // 利用規約とプライバシーポリシー
-                    VStack(spacing: 4) {
-                        Text("続行することで、カロ研の")
-                            .font(.system(size: 13))
-                            .foregroundColor(.secondary)
-                        
-                        HStack(spacing: 4) {
-                            Button {
-                                navigateToTerms = true
-                            } label: {
-                                Text("利用規約")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.orange)
-                            }
-                            
-                            Text("と")
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                            
-                            Button {
-                                navigateToPrivacy = true
-                            } label: {
-                                Text("プライバシーポリシー")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.orange)
-                            }
-                            
-                            Text("に同意します")
-                                .font(.system(size: 13))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.bottom, 16)
+                    termsSection
                 }
                 .frame(maxWidth: .infinity)
                 .background(Color(UIColor.secondarySystemGroupedBackground))
                 .clipShape(LoginRoundedCorner(radius: 20, corners: [.topLeft, .topRight]))
-                
-                // 下部の背景色を埋める
-                Color(UIColor.secondarySystemGroupedBackground)
-                    .frame(height: 34)
-                    .ignoresSafeArea(edges: .bottom)
             }
             
             // ローディングオーバーレイ
-            if isSigningIn || authService.isLoading {
+            if isSigningIn || authService.isLoading || subscriptionManager.isChecking {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
                 
@@ -116,7 +87,7 @@ struct S23_LoginView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(1.5)
                     
-                    Text("ログイン中...")
+                    Text(subscriptionManager.isChecking ? "確認中..." : "ログイン中...")
                         .font(.system(size: 14))
                         .foregroundColor(.white)
                 }
@@ -138,18 +109,79 @@ struct S23_LoginView: View {
             Text(errorMessage)
         }
         .onChange(of: authService.isLoggedIn) { _, newValue in
-            if newValue && !navigateToPaywall {
-                print("✅ Auth state changed: isLoggedIn = true, navigating to paywall")
-                navigateToPaywall = true
+            if newValue {
+                print("✅ Auth state changed: isLoggedIn = true")
+                checkSubscriptionAndNavigate()
             }
         }
         .onAppear {
-            // 既にログイン済みの場合はPaywallへ
-            if authService.isLoggedIn && !navigateToPaywall {
-                print("✅ Already logged in, navigating to paywall")
-                navigateToPaywall = true
+            if authService.isLoggedIn {
+                print("✅ Already logged in, checking subscription...")
+                checkSubscriptionAndNavigate()
             }
         }
+    }
+    
+    // MARK: - サブスクリプション確認して遷移
+    private func checkSubscriptionAndNavigate() {
+        Task {
+            await subscriptionManager.checkSubscriptionStatus()
+            
+            await MainActor.run {
+                if subscriptionManager.isSubscribed {
+                    // 課金済み → ホームへ直行
+                    print("✅ User is subscribed, going to home")
+                    isLoggedIn = true
+                } else {
+                    // 未課金 → Paywallへ
+                    print("⚠️ User is not subscribed, showing paywall")
+                    navigateToPaywall = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Terms Section
+    private var termsSection: some View {
+        VStack(spacing: 4) {
+            Text("続行することで、カロ研の")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 4) {
+                Button {
+                    navigateToTerms = true
+                } label: {
+                    Text("利用規約")
+                        .font(.system(size: 13))
+                        .foregroundColor(.orange)
+                }
+                
+                Text("と")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+                
+                Button {
+                    navigateToPrivacy = true
+                } label: {
+                    Text("プライバシーポリシー")
+                        .font(.system(size: 13))
+                        .foregroundColor(.orange)
+                }
+                
+                Text("に同意します")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.bottom, safeAreaBottomInset > 0 ? safeAreaBottomInset : 16)
+    }
+    
+    // Safe Area の下部インセットを取得
+    private var safeAreaBottomInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.safeAreaInsets.bottom ?? 0
     }
     
     // MARK: - Social Login Buttons
@@ -157,7 +189,6 @@ struct S23_LoginView: View {
         VStack(spacing: 16) {
             // Appleでサインイン
             SignInWithAppleButton(.signIn) { request in
-                // nonceを生成
                 currentNonce = authService.generateNonce()
                 request.requestedScopes = [.fullName, .email]
                 request.nonce = authService.sha256(currentNonce)
@@ -175,7 +206,6 @@ struct S23_LoginView: View {
                 signInWithGoogle()
             } label: {
                 HStack(spacing: 12) {
-                    // Googleロゴ
                     ZStack {
                         Circle()
                             .fill(Color.white)
@@ -218,11 +248,8 @@ struct S23_LoginView: View {
                 try await authService.signInWithGoogle()
                 await MainActor.run {
                     isSigningIn = false
-                    // signInWithGoogleが成功した場合のみここに来る
-                    // isLoggedInの変更はonChangeで検知
                 }
             } catch AuthError.cancelled {
-                // キャンセルはエラー表示しない
                 await MainActor.run {
                     isSigningIn = false
                     print("🚫 Google Sign In was cancelled")
@@ -237,14 +264,13 @@ struct S23_LoginView: View {
         }
     }
     
-    // MARK: - Apple Sign In (Supabase連携)
+    // MARK: - Apple Sign In
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
             if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
                 isSigningIn = true
                 
-                // IDトークンを取得
                 guard let identityTokenData = appleIDCredential.identityToken,
                       let identityToken = String(data: identityTokenData, encoding: .utf8) else {
                     isSigningIn = false
@@ -257,15 +283,7 @@ struct S23_LoginView: View {
                 let email = appleIDCredential.email
                 
                 print("🍎 Apple Sign In - Got ID Token")
-                print("   User ID: \(appleIDCredential.user)")
-                if let givenName = fullName?.givenName {
-                    print("   Name: \(givenName)")
-                }
-                if let email = email {
-                    print("   Email: \(email)")
-                }
                 
-                // SupabaseにIDトークンを送信
                 Task {
                     do {
                         try await authService.signInWithApple(
@@ -278,7 +296,6 @@ struct S23_LoginView: View {
                         await MainActor.run {
                             isSigningIn = false
                             print("✅ Apple Sign In with Supabase completed")
-                            navigateToPaywall = true
                         }
                     } catch {
                         await MainActor.run {
@@ -307,20 +324,19 @@ struct S23_LoginView: View {
         case .canceled:
             print("   User canceled")
         case .unknown:
-            // シミュレータでのエラーの場合は開発モードでスキップ
             if isDevelopment {
-                print("⚠️ Apple Sign In failed on simulator - use Skip button for development")
+                print("⚠️ Apple Sign In failed on simulator")
             }
-            errorMessage = "Apple Sign Inでエラーが発生しました。シミュレータでは動作しません。実機でお試しください。"
+            errorMessage = "Apple Sign Inでエラーが発生しました。シミュレータでは動作しません。"
             showError = true
         case .invalidResponse:
-            errorMessage = "サーバーからの応答が無効です。もう一度お試しください。"
+            errorMessage = "サーバーからの応答が無効です。"
             showError = true
         case .notHandled:
             errorMessage = "認証リクエストが処理されませんでした。"
             showError = true
         case .failed:
-            errorMessage = "認証に失敗しました。もう一度お試しください。"
+            errorMessage = "認証に失敗しました。"
             showError = true
         case .notInteractive:
             print("   Not interactive")
@@ -334,36 +350,39 @@ struct S23_LoginView: View {
     }
 }
 
-// MARK: - iPhone Mockup with Video
+// MARK: - iPhone Mockup with Video (黒フレーム)
 struct LoginPhoneMockupView: View {
     var body: some View {
         ZStack {
-            // iPhone フレーム（ゴールド）
-            RoundedRectangle(cornerRadius: 40)
-                .fill(Color(red: 0.85, green: 0.65, blue: 0.2))
-                .frame(width: 260, height: 520)
+            // 外側フレーム（黒）
+            RoundedRectangle(cornerRadius: 45)
+                .fill(Color.black)
+                .frame(width: 280, height: 560)
                 .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
             
-            // 内側の黒枠
-            RoundedRectangle(cornerRadius: 35)
-                .fill(Color.black)
-                .frame(width: 248, height: 508)
+            // 内側フレーム（ダークグレー - ベゼル）
+            RoundedRectangle(cornerRadius: 42)
+                .fill(Color(white: 0.15))
+                .frame(width: 272, height: 552)
             
-            // 画面エリア（動画表示）
+            // 画面部分
             ZStack {
-                // 背景
                 Color(UIColor.systemBackground)
-                
-                // 動画プレイヤー
                 LoginVideoPlayerView()
             }
-            .frame(width: 236, height: 496)
-            .clipShape(RoundedRectangle(cornerRadius: 30))
+            .frame(width: 256, height: 536)
+            .clipShape(RoundedRectangle(cornerRadius: 38))
+            
+            // ダイナミックアイランド
+            Capsule()
+                .fill(Color.black)
+                .frame(width: 90, height: 28)
+                .offset(y: -252)
         }
     }
 }
 
-// MARK: - Video Player for Login Mockup
+// MARK: - Video Player
 struct LoginVideoPlayerView: View {
     @State private var player: AVPlayer?
     @State private var isVideoReady = false
@@ -375,14 +394,11 @@ struct LoginVideoPlayerView: View {
                     .opacity(isVideoReady ? 1 : 0)
             }
             
-            // フォールバック（動画が読み込まれるまで）
             if !isVideoReady {
                 LoginStaticMockupContent()
             }
         }
-        .onAppear {
-            setupPlayer()
-        }
+        .onAppear { setupPlayer() }
         .onDisappear {
             player?.pause()
             player = nil
@@ -392,30 +408,29 @@ struct LoginVideoPlayerView: View {
     private func setupPlayer() {
         var videoURL: URL?
         
-        // 1. Bundle内の動画ファイルを探す
-        if let bundleURL = Bundle.main.url(forResource: "OnboardingTest", withExtension: "mp4") {
+        // Bundle内のファイルを探す（動画名: onboarding）
+        if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
             videoURL = bundleURL
             print("✅ Login: Video found in Bundle")
-        }
-        // 2. Assets Catalogから読み込む
-        else if let asset = NSDataAsset(name: "OnboardingTest") {
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("LoginOnboardingTest.mp4")
+        } else if let asset = NSDataAsset(name: "onboarding") {
+            // Assets Catalogから取得
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("LoginOnboarding.mp4")
             do {
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
+                }
                 try asset.data.write(to: tempURL)
                 videoURL = tempURL
                 print("✅ Login: Video loaded from Assets")
             } catch {
                 print("❌ Login: Failed to write video: \(error)")
             }
-        } else {
-            print("⚠️ Login: Video not found, using static mockup")
         }
         
         if let url = videoURL {
             let newPlayer = AVPlayer(url: url)
             newPlayer.isMuted = true
             
-            // ループ再生の設定
             NotificationCenter.default.addObserver(
                 forName: .AVPlayerItemDidPlayToEndTime,
                 object: newPlayer.currentItem,
@@ -427,7 +442,6 @@ struct LoginVideoPlayerView: View {
             
             self.player = newPlayer
             
-            // 少し遅延してから再生開始
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 newPlayer.play()
                 withAnimation(.easeIn(duration: 0.3)) {
@@ -438,7 +452,6 @@ struct LoginVideoPlayerView: View {
     }
 }
 
-// MARK: - AVPlayer UIViewRepresentable
 struct LoginVideoPlayer: UIViewRepresentable {
     let player: AVPlayer
     
@@ -454,160 +467,77 @@ struct LoginVideoPlayer: UIViewRepresentable {
 }
 
 class LoginPlayerUIView: UIView {
-    override class var layerClass: AnyClass {
-        AVPlayerLayer.self
-    }
-    
-    var playerLayer: AVPlayerLayer {
-        layer as! AVPlayerLayer
-    }
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
-// MARK: - Static Mockup Content (Fallback)
+// MARK: - Static Mockup Content
 struct LoginStaticMockupContent: View {
     var body: some View {
         VStack(spacing: 0) {
             // ステータスバー
             HStack {
                 Text("22:22")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                 Spacer()
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "cellularbars")
                     Image(systemName: "wifi")
                     Image(systemName: "battery.100")
                 }
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundColor(.primary)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 10)
+            .padding(.horizontal, 20)
+            .padding(.top, 45)
             
             // ヘッダー
             HStack {
                 Text("🐱")
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                 Text("カロ研")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.orange)
                 Spacer()
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 12))
+                    .font(.system(size: 14))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             
-            // 週カレンダー
-            HStack(spacing: 6) {
-                ForEach(["月", "火", "水", "木", "金", "土", "日"], id: \.self) { day in
-                    VStack(spacing: 3) {
-                        Text(day)
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary)
-                        
-                        Circle()
-                            .stroke(day == "木" ? Color.orange : Color(UIColor.systemGray4), lineWidth: 1)
-                            .frame(width: 22, height: 22)
-                            .overlay(
-                                Text("\(5 + (["月", "火", "水", "木", "金", "土", "日"].firstIndex(of: day) ?? 0))")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.primary)
-                            )
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(Color(UIColor.secondarySystemGroupedBackground))
-            .cornerRadius(12)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
+            Spacer()
             
-            // カロリーカード
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .stroke(Color(UIColor.systemGray4), lineWidth: 8)
-                        .frame(width: 60, height: 60)
-                    
-                    Circle()
-                        .trim(from: 0, to: 0.4)
-                        .stroke(Color.orange, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                        .frame(width: 60, height: 60)
-                        .rotationEffect(.degrees(-90))
-                    
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.orange)
-                }
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("摂取カロリー")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                        Text("850")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundColor(.primary)
-                        Text("/2200")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Spacer()
+            // メインコンテンツ
+            ZStack {
+                Circle()
+                    .stroke(Color(UIColor.systemGray4), lineWidth: 10)
+                    .frame(width: 100, height: 100)
+                Circle()
+                    .trim(from: 0, to: 0.4)
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .frame(width: 100, height: 100)
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.orange)
             }
-            .padding(12)
-            .background(Color(UIColor.secondarySystemGroupedBackground))
-            .cornerRadius(12)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
             
-            // アドバイスカード
-            HStack(spacing: 6) {
-                Text("🐱")
-                    .font(.system(size: 32))
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("いい感じだにゃ！🐱")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.primary)
-                    Text("バランスよく食べられてるよ✨")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-                .padding(8)
-                .background(Color(UIColor.tertiarySystemGroupedBackground))
-                .cornerRadius(10)
-                
-                Spacer()
-            }
-            .padding(10)
-            .background(Color(UIColor.secondarySystemGroupedBackground))
-            .cornerRadius(12)
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
-            
-            // 栄養素カード
-            HStack(spacing: 6) {
-                LoginMockNutrient(emoji: "🥩", value: "45", target: "100", name: "たんぱく質")
-                LoginMockNutrient(emoji: "🥑", value: "30", target: "60", name: "脂質")
-                LoginMockNutrient(emoji: "🍚", value: "120", target: "250", name: "炭水化物")
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 4)
+            Text("850 / 2200 kcal")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.primary)
+                .padding(.top, 12)
             
             Spacer()
             
             // タブバー
             HStack {
                 Spacer()
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     Image(systemName: "house.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 18))
                     Text("ホーム")
-                        .font(.system(size: 8))
+                        .font(.system(size: 9))
                 }
                 .foregroundColor(.orange)
                 
@@ -615,53 +545,26 @@ struct LoginStaticMockupContent: View {
                 
                 Circle()
                     .fill(Color.orange)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .overlay(
                         Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                     )
                 
                 Spacer()
                 
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     Image(systemName: "chart.bar.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 18))
                     Text("進捗")
-                        .font(.system(size: 8))
+                        .font(.system(size: 9))
                 }
                 .foregroundColor(.secondary)
                 
                 Spacer()
             }
-            .padding(.bottom, 8)
         }
-        .frame(width: 236, height: 496)
-    }
-}
-
-// MARK: - ミニ栄養素カード
-struct LoginMockNutrient: View {
-    let emoji: String
-    let value: String
-    let target: String
-    let name: String
-    
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(emoji)
-                .font(.system(size: 16))
-            Text("\(value)/\(target)g")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.primary)
-            Text(name)
-                .font(.system(size: 8))
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(Color(UIColor.secondarySystemGroupedBackground))
-        .cornerRadius(10)
     }
 }
 

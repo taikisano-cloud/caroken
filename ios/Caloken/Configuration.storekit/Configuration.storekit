@@ -56,12 +56,13 @@
           },
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
-              "locale" : "en_US"
+              "description" : "毎月更新のプレミアムプラン。7日間無料でお試しいただけます。",
+              "displayName" : "カロ研プレミアム（月額）",
+              "locale" : "ja"
             }
           ],
-          "productID" : "com.caloken.subscription",
+          "productID" : "com.caloken.subscription.monthly",
+          "promotionalImageID" : "186F2C4D",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "カロ研-月額プラン",
           "subscriptionGroupID" : "11706B42",
@@ -84,12 +85,12 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "",
-              "displayName" : "",
-              "locale" : "en_US"
+              "description" : "お得な年間プラン。7日間無料でお試しいただけます。1日あたり約19円！",
+              "displayName" : "カロ研プレミアム（年額）",
+              "locale" : "ja"
             }
           ],
-          "productID" : "com.caloken.subscription",
+          "productID" : "com.caloken.subscription.yearly",
           "promotionalImageID" : "186F2C4D",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "カロ研-年額プラン",

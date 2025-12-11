@@ -6,9 +6,6 @@ import Foundation
 // MARK: - NetworkManager拡張（チャットAPI）
 extension NetworkManager {
     
- 
-
-    
     /// カロちゃんチャットAPI（モード対応版）
     func sendChatWithUserContext(
         message: String,
@@ -18,7 +15,6 @@ extension NetworkManager {
         mode: String = "fast"
     ) async throws -> String {
         
-        // ✅ 正しいエンドポイント
         let endpoint = "\(baseURL)/v1/chat"
         
         print("💬 Chat Request: \(endpoint)")
@@ -68,7 +64,7 @@ extension NetworkManager {
         return responseText
     }
     
-    /// ホーム画面アドバイスAPI（Flashモデル使用 - 高速）
+    /// ホーム画面アドバイスAPI（時間帯・食事詳細対応版）
     func fetchHomeAdvice(
         todayCalories: Int,
         goalCalories: Int,
@@ -76,13 +72,38 @@ extension NetworkManager {
         todayFat: Int,
         todayCarbs: Int,
         todayMeals: String,
-        mealCount: Int
+        mealCount: Int,
+        breakfastCount: Int = 0,
+        lunchCount: Int = 0,
+        dinnerCount: Int = 0,
+        snackCount: Int = 0
     ) async throws -> String {
         
-        // ✅ 正しいエンドポイント（Flashモデル使用）
         let endpoint = "\(baseURL)/v1/advice"
         
+        // 現在の時間帯を計算
+        let hour = Calendar.current.component(.hour, from: Date())
+        let timeOfDay: String
+        let timeContext: String
+        
+        if hour < 10 {
+            timeOfDay = "morning"
+            timeContext = "朝"
+        } else if hour < 14 {
+            timeOfDay = "noon"
+            timeContext = "昼"
+        } else if hour < 18 {
+            timeOfDay = "afternoon"
+            timeContext = "夕方"
+        } else {
+            timeOfDay = "evening"
+            timeContext = "夜"
+        }
+        
         print("📝 Advice Request: \(endpoint)")
+        print("  - Time: \(timeContext) (\(hour)時)")
+        print("  - Meals: 朝\(breakfastCount) 昼\(lunchCount) 夕\(dinnerCount) 間食\(snackCount)")
+        print("  - Total: \(todayCalories)/\(goalCalories) kcal")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -99,7 +120,14 @@ extension NetworkManager {
             "today_fat": todayFat,
             "today_carbs": todayCarbs,
             "today_meals": todayMeals,
-            "meal_count": mealCount
+            "meal_count": mealCount,
+            "breakfast_count": breakfastCount,
+            "lunch_count": lunchCount,
+            "dinner_count": dinnerCount,
+            "snack_count": snackCount,
+            "current_hour": hour,
+            "time_of_day": timeOfDay,
+            "time_context": timeContext
         ]
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -139,7 +167,6 @@ extension NetworkManager {
         sodium: Double = 0
     ) async throws -> String {
         
-        // ✅ 正しいエンドポイント
         let endpoint = "\(baseURL)/v1/meal-comment"
         
         print("🍽️ Meal Comment Request: \(endpoint)")
@@ -189,7 +216,7 @@ extension NetworkManager {
     }
 }
 
-// MARK: - HomeAdviceManager互換
+// MARK: - HomeAdviceManager互換（旧API対応）
 extension NetworkManager {
     func getHomeAdvice(
         todayCalories: Int,
@@ -217,7 +244,6 @@ extension NetworkManager {
     
     /// 食事画像を分析（Proモデル使用）
     func analyzeMeal(imageBase64: String) async throws -> MealAnalysisData {
-        // ✅ 正しいエンドポイント
         let endpoint = "\(baseURL)/v1/analyze-meal"
         
         print("🍽️ Meal Analysis (Image):")
@@ -255,16 +281,13 @@ extension NetworkManager {
         if let jsonString = String(data: data, encoding: .utf8) {
             print("  - Response: \(jsonString.prefix(300))...")
         }
-        
-        let decoder = JSONDecoder()
-        // レスポンスは { "analysis": { ... } } 形式
+    
         let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)
         return result
     }
     
     /// 食事テキストを分析（Proモデル使用）
     func analyzeMeal(description: String) async throws -> MealAnalysisData {
-        // ✅ 正しいエンドポイント
         let endpoint = "\(baseURL)/v1/analyze-meal"
         
         print("🍽️ Meal Analysis (Text):")
@@ -304,8 +327,6 @@ extension NetworkManager {
             print("  - Response: \(jsonString.prefix(300))...")
         }
         
-        let decoder = JSONDecoder()
-        // レスポンスは { "analysis": { ... } } 形式
         let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)
         return result
     }
