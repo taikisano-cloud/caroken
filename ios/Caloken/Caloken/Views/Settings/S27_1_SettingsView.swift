@@ -5,9 +5,13 @@ struct S27_1_SettingsView: View {
     @AppStorage("isLoggedIn") private var isLoggedIn: Bool = true
     @StateObject private var profileManager = UserProfileManager.shared
     @StateObject private var weightLogsManager = WeightLogsManager.shared
+    @StateObject private var healthKitManager = HealthKitManager.shared
+    @StateObject private var notificationManager = NotificationManager.shared
     
-    @State private var isHealthSyncEnabled: Bool = true
+    @AppStorage("isHealthSyncEnabled") private var isHealthSyncEnabled: Bool = false
     @State private var showSignOutAlert: Bool = false
+    @State private var showHealthKitAlert: Bool = false
+    @State private var healthKitAlertMessage: String = ""
     
     // 性別表示テキスト
     private var genderDisplayText: String {
@@ -24,8 +28,6 @@ struct S27_1_SettingsView: View {
             VStack(spacing: 12) {
                 // 身体情報セクション
                 VStack(spacing: 0) {
-                    
-                    
                     NavigationLink {
                         S27_2_ProfileEditView()
                     } label: {
@@ -49,163 +51,172 @@ struct S27_1_SettingsView: View {
                     }
                     
                     Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_2_ProfileEditView()
-                        } label: {
-                            ProfileRow(label: "生年月日", value: formatDate(profileManager.birthDate))
-                        }
-                    }
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
                     
-                    // Apple Health同期
-                    HStack(spacing: 12) {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 18))
-                            .foregroundColor(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Color.pink)
-                            .cornerRadius(8)
-                        
-                        Text("Apple Healthと同期")
-                            .font(.system(size: 16))
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        Toggle("", isOn: $isHealthSyncEnabled)
-                            .labelsHidden()
-                    }
-                    .padding(16)
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
-                    // 栄養目標セクション
                     NavigationLink {
-                        S27_3_NutritionGoalView()
+                        S27_2_ProfileEditView()
                     } label: {
-                        NutritionGoalCard(
-                            calories: profileManager.calorieGoal,
-                            carbs: profileManager.carbGoal,
-                            protein: profileManager.proteinGoal,
-                            fat: profileManager.fatGoal
-                        )
+                        ProfileRow(label: "生年月日", value: formatDate(profileManager.birthDate))
                     }
-                    .padding(.horizontal, 16)
-                    
-                    // その他の設定
-                    VStack(spacing: 0) {
-                        NavigationLink {
-                            S27_5_FeatureRequestView()
-                        } label: {
-                            SettingsLinkRow(title: "機能リクエスト")
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_6_ContactView()
-                        } label: {
-                            SettingsLinkRow(title: "お問い合わせ")
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_4_NotificationSettingsView()
-                        } label: {
-                            SettingsLinkRow(title: "通知設定")
-                        }
-                    }
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
-                    // SNSセクション
-                    VStack(spacing: 0) {
-                        SocialLinkRow2(platform: "TikTok", urlString: "https://www.tiktok.com/@your_account")
-                        Divider().padding(.leading, 16)
-                        SocialLinkRow2(platform: "Instagram", urlString: "https://www.instagram.com/your_account")
-                        Divider().padding(.leading, 16)
-                        SocialLinkRow2(platform: "YouTube", urlString: "https://www.youtube.com/@your_account")
-                        Divider().padding(.leading, 16)
-                        SocialLinkRow2(platform: "X", urlString: "https://x.com/your_account")
-                    }
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
-                    // 利用規約・プライバシーポリシー
-                    VStack(spacing: 0) {
-                        NavigationLink {
-                            S27_7_TermsOfServiceView()
-                        } label: {
-                            SettingsLinkRow(title: "利用規約")
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_8_PrivacyPolicyView()
-                        } label: {
-                            SettingsLinkRow(title: "プライバシーポリシー")
-                        }
-                    }
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
-                    // アカウント管理
-                    VStack(spacing: 0) {
-                        Button {
-                            showSignOutAlert = true
-                        } label: {
-                            HStack {
-                                Text("サインアウト")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.red)
-                                Spacer()
-                            }
-                            .padding(16)
-                        }
-                        
-                        Divider().padding(.leading, 16)
-                        
-                        NavigationLink {
-                            S27_9_DeleteAccountView(onAccountDeleted: {
-                                // アカウント削除完了 → S1に戻る
-                                withAnimation {
-                                    isLoggedIn = false
-                                }
-                            })
-                        } label: {
-                            HStack {
-                                Text("アカウント削除")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.red)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(16)
-                        }
-                    }
-                    .background(Color(UIColor.systemGray6))
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
-                    
-                    // バージョン情報
-                    Text("バージョン 1.0.0")
-                        .font(.system(size: 13))
-                        .foregroundColor(.gray)
-                        .padding(.top, 8)
-                        .padding(.bottom, 32)
                 }
-                .padding(.top, 16)
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // Apple Health同期
+                HStack(spacing: 12) {
+                    // 純正風Healthアイコン
+                    AppleHealthIcon()
+                    
+                    Text("Apple Healthと同期")
+                        .font(.system(size: 16))
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Toggle("", isOn: Binding(
+                        get: { isHealthSyncEnabled },
+                        set: { newValue in
+                            handleHealthSyncToggle(newValue)
+                        }
+                    ))
+                    .labelsHidden()
+                }
+                .padding(16)
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // HealthKitデータ表示（同期がONの場合）
+                if isHealthSyncEnabled && healthKitManager.isAuthorized {
+                    HealthDataCard(
+                        steps: healthKitManager.todaySteps,
+                        activeCalories: healthKitManager.todayActiveCalories
+                    )
+                    .padding(.horizontal, 16)
+                }
+                
+                // 栄養目標セクション
+                NavigationLink {
+                    S27_3_NutritionGoalView()
+                } label: {
+                    NutritionGoalCard(
+                        calories: profileManager.calorieGoal,
+                        carbs: profileManager.carbGoal,
+                        protein: profileManager.proteinGoal,
+                        fat: profileManager.fatGoal
+                    )
+                }
+                .padding(.horizontal, 16)
+                
+                // その他の設定
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        S27_5_FeatureRequestView()
+                    } label: {
+                        SettingsLinkRow(title: "機能リクエスト")
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_6_ContactView()
+                    } label: {
+                        SettingsLinkRow(title: "お問い合わせ")
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_4_NotificationSettingsView()
+                    } label: {
+                        SettingsLinkRow(title: "通知設定")
+                    }
+                }
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // SNSセクション
+                VStack(spacing: 0) {
+                    SocialLinkRow2(platform: "TikTok", urlString: "https://www.tiktok.com/@your_account")
+                    Divider().padding(.leading, 16)
+                    SocialLinkRow2(platform: "Instagram", urlString: "https://www.instagram.com/your_account")
+                    Divider().padding(.leading, 16)
+                    SocialLinkRow2(platform: "YouTube", urlString: "https://www.youtube.com/@your_account")
+                    Divider().padding(.leading, 16)
+                    SocialLinkRow2(platform: "X", urlString: "https://x.com/your_account")
+                }
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // 利用規約・プライバシーポリシー
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        S27_7_TermsOfServiceView()
+                    } label: {
+                        SettingsLinkRow(title: "利用規約")
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_8_PrivacyPolicyView()
+                    } label: {
+                        SettingsLinkRow(title: "プライバシーポリシー")
+                    }
+                }
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // アカウント管理
+                VStack(spacing: 0) {
+                    Button {
+                        showSignOutAlert = true
+                    } label: {
+                        HStack {
+                            Text("サインアウト")
+                                .font(.system(size: 16))
+                                .foregroundColor(.red)
+                            Spacer()
+                        }
+                        .padding(16)
+                    }
+                    
+                    Divider().padding(.leading, 16)
+                    
+                    NavigationLink {
+                        S27_9_DeleteAccountView(onAccountDeleted: {
+                            withAnimation {
+                                isLoggedIn = false
+                            }
+                        })
+                    } label: {
+                        HStack {
+                            Text("アカウント削除")
+                                .font(.system(size: 16))
+                                .foregroundColor(.red)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.gray)
+                        }
+                        .padding(16)
+                    }
+                }
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+                
+                // バージョン情報
+                Text("バージョン 1.0.0")
+                    .font(.system(size: 13))
+                    .foregroundColor(.gray)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
+            }
+            .padding(.top, 16)
         }
         .background(Color(UIColor.systemBackground))
         .navigationTitle("設定")
@@ -230,11 +241,62 @@ struct S27_1_SettingsView: View {
         } message: {
             Text("本当にサインアウトしますか？")
         }
+        .alert("Apple Health", isPresented: $showHealthKitAlert) {
+            Button("OK", role: .cancel) {}
+            if !healthKitManager.isHealthDataAvailable {
+                // 利用不可の場合は何もしない
+            } else {
+                Button("設定を開く") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            }
+        } message: {
+            Text(healthKitAlertMessage)
+        }
         .enableSwipeBack()
+        .onAppear {
+            // HealthKit同期がONなら最新データを取得
+            if isHealthSyncEnabled && healthKitManager.isAuthorized {
+                Task {
+                    await healthKitManager.fetchTodayData()
+                }
+            }
+        }
+    }
+    
+    // MARK: - HealthKit Toggle Handler
+    
+    private func handleHealthSyncToggle(_ newValue: Bool) {
+        if newValue {
+            // ONにしようとしている
+            if !healthKitManager.isHealthDataAvailable {
+                healthKitAlertMessage = "このデバイスではApple Healthを利用できません。"
+                showHealthKitAlert = true
+                return
+            }
+            
+            Task {
+                do {
+                    try await healthKitManager.requestAuthorization()
+                    await MainActor.run {
+                        isHealthSyncEnabled = true
+                    }
+                } catch {
+                    await MainActor.run {
+                        healthKitAlertMessage = "Apple Healthへのアクセスを許可してください。設定アプリから変更できます。"
+                        showHealthKitAlert = true
+                    }
+                }
+            }
+        } else {
+            // OFFにする
+            isHealthSyncEnabled = false
+        }
     }
     
     private func signOut() {
-        // @AppStorage を更新 → CalokenApp.swift でS1に切り替わる
         withAnimation {
             isLoggedIn = false
         }
@@ -245,6 +307,89 @@ struct S27_1_SettingsView: View {
         formatter.locale = Locale(identifier: "ja_JP")
         formatter.dateFormat = "M月 d日, yyyy"
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - 純正風Apple Healthアイコン
+struct AppleHealthIcon: View {
+    var body: some View {
+        ZStack {
+            // 白い角丸四角の背景
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.white)
+                .frame(width: 32, height: 32)
+            
+            // ピンクのハートアイコン
+            Image(systemName: "heart.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.4, blue: 0.5),  // ピンク
+                            Color(red: 1.0, green: 0.3, blue: 0.4)   // 濃いピンク
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        }
+        // 周囲に軽い影を追加（純正感を出す）
+        .shadow(color: Color.black.opacity(0.1), radius: 1, x: 0, y: 1)
+    }
+}
+
+// MARK: - HealthKitデータカード
+struct HealthDataCard: View {
+    let steps: Int
+    let activeCalories: Double
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今日のアクティビティ")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 24) {
+                // 歩数
+                HStack(spacing: 8) {
+                    Image(systemName: "figure.walk")
+                        .font(.system(size: 16))
+                        .foregroundColor(.green)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(steps.formatted())")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("歩")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // アクティブカロリー
+                HStack(spacing: 8) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.orange)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(Int(activeCalories))")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text("kcal")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .padding(16)
+        .background(Color(UIColor.systemGray6))
+        .cornerRadius(12)
     }
 }
 
@@ -341,7 +486,6 @@ struct NutritionGoalCard: View {
                     .foregroundColor(.gray)
             }
             
-            // 4つの円グラフ
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
                 NutritionCircle(
                     value: calories,
@@ -425,5 +569,7 @@ struct NutritionCircle: View {
 }
 
 #Preview {
-    S27_1_SettingsView()
+    NavigationStack {
+        S27_1_SettingsView()
+    }
 }

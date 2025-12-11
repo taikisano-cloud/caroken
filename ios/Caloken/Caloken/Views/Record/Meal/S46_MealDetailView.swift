@@ -8,7 +8,7 @@ struct S46_MealDetailView: View {
     var existingLogDate: Date? = nil
     var isFromLog: Bool = false
     var isFromManualEntry: Bool = false
-    var hideBookmark: Bool = false
+    var hideBookmark: Bool = false  // ✅ trueの場合は保存済みからの遷移
     
     @State private var currentImage: UIImage? = nil
     @State private var quantity: Int = 1
@@ -34,6 +34,9 @@ struct S46_MealDetailView: View {
     @FocusState private var isMealNameFocused: Bool
     
     var isEditMode: Bool { existingLogId != nil }
+    
+    // ✅ 保存済みからの遷移かどうか（hideBookmarkで判定）
+    var isFromSavedMeals: Bool { hideBookmark }
     
     enum EditingField {
         case calories, protein, fat, carbs, sugar, fiber, sodium
@@ -178,8 +181,6 @@ struct S46_MealDetailView: View {
     private func getDisplayComment() -> String {
         if !characterComment.isEmpty {
             return characterComment
-        } else if !result.characterComment.isEmpty {
-            return result.characterComment
         } else {
             return "美味しそうだにゃ！🐱"
         }
@@ -350,7 +351,10 @@ struct S46_MealDetailView: View {
     // MARK: - 下部ボタンセクション
     private var bottomButtonsSection: some View {
         HStack(spacing: 12) {
-            leftActionButton
+            // ✅ 保存済みからの遷移でない場合のみ左側ボタンを表示
+            if !isFromSavedMeals {
+                leftActionButton
+            }
             saveButton
         }
         .padding(.horizontal, 20)
@@ -361,6 +365,7 @@ struct S46_MealDetailView: View {
     @ViewBuilder
     private var leftActionButton: some View {
         if isFromLog {
+            // ✅ 食事ログからの遷移時のみ削除ボタンを表示
             secondaryButton(icon: "trash", title: "削除") {
                 if let logId = existingLogId {
                     MealLogsManager.shared.removeLog(id: logId)
@@ -405,13 +410,26 @@ struct S46_MealDetailView: View {
     
     private var saveButton: some View {
         Button(action: { saveToHome() }) {
-            Text(isEditMode ? "更新" : isFromLog ? "今日の食事として記録" : "保存")
+            Text(getSaveButtonTitle())
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.orange)
                 .cornerRadius(25)
+        }
+    }
+    
+    // ✅ 保存ボタンのタイトルを取得
+    private func getSaveButtonTitle() -> String {
+        if isFromSavedMeals {
+            return "今日の食事として記録"
+        } else if isEditMode {
+            return "更新"
+        } else if isFromLog {
+            return "今日の食事として記録"
+        } else {
+            return "保存"
         }
     }
     
@@ -460,12 +478,17 @@ struct S46_MealDetailView: View {
             selectedDate = existingDate
         }
         
+        // ✅ まずresult.characterCommentを初期値として設定
+        if !result.characterComment.isEmpty {
+            characterComment = result.characterComment
+        }
+        
         // ✅ 既存のログから数量とコメントを復元
         if let logId = existingLogId,
            let existingLog = MealLogsManager.shared.getLog(by: logId) {
             quantity = existingLog.quantity
             
-            // ✅ 保存されたコメントがあれば復元
+            // ✅ 保存されたコメントがあれば復元（優先）
             if !existingLog.characterComment.isEmpty {
                 characterComment = existingLog.characterComment
             }
@@ -486,8 +509,8 @@ struct S46_MealDetailView: View {
             checkIfAlreadySaved()
         } else {
             isBookmarked = false
-            // ✅ 新規の場合のみコメントを取得
-            if characterComment.isEmpty && result.characterComment.isEmpty {
+            // ✅ コメントがまだない場合のみAIに取得させる
+            if characterComment.isEmpty {
                 fetchCharacterComment()
             }
         }
@@ -497,10 +520,6 @@ struct S46_MealDetailView: View {
     private func fetchCharacterComment() {
         // 既にコメントがある場合はスキップ
         guard characterComment.isEmpty else { return }
-        guard result.characterComment.isEmpty || result.characterComment == "美味しそうだにゃ！🐱" else {
-            characterComment = result.characterComment
-            return
-        }
         
         isLoadingComment = true
         
@@ -535,12 +554,27 @@ struct S46_MealDetailView: View {
     }
     
     private func saveToHome() {
-        // ✅ コメントを決定
-        let finalComment = characterComment.isEmpty ? result.characterComment : characterComment
+        // ✅ コメントを決定（空の場合はデフォルト）
+        let finalComment: String
+        if !characterComment.isEmpty {
+            finalComment = characterComment
+        } else if !result.characterComment.isEmpty {
+            finalComment = result.characterComment
+        } else {
+            finalComment = "美味しそうだにゃ！🐱"
+        }
+        
+        // ✅ 保存済みからの遷移の場合は新規ログとして追加
+        let logId: UUID
+        if isFromSavedMeals {
+            logId = UUID()  // 新しいIDを生成
+        } else {
+            logId = existingLogId ?? UUID()
+        }
         
         // ✅ 1個あたりの値を保存（quantityは別で保存）
         let mealLog = MealLogEntry(
-            id: existingLogId ?? UUID(),
+            id: logId,
             name: getMealName(),
             calories: editedCalories,
             protein: Int(editedProtein),
@@ -554,16 +588,17 @@ struct S46_MealDetailView: View {
             time: selectedDate,
             image: currentImage?.jpegData(compressionQuality: 0.7),
             quantity: quantity,
-            characterComment: finalComment  // ✅ コメントを保存
+            characterComment: finalComment  // ✅ コメントを確実に保存
         )
         
-        if isEditMode {
-            MealLogsManager.shared.updateLog(mealLog)
-        } else {
+        // ✅ 保存済みからの遷移または新規の場合は追加、それ以外は更新
+        if isFromSavedMeals || !isEditMode {
             MealLogsManager.shared.addLog(mealLog)
+        } else {
+            MealLogsManager.shared.updateLog(mealLog)
         }
         
-        let message = "\(getMealName())を\(isEditMode ? "更新" : "記録")しました"
+        let message = "\(getMealName())を\(isEditMode && !isFromSavedMeals ? "更新" : "記録")しました"
         NotificationCenter.default.post(
             name: .showHomeToast,
             object: nil,

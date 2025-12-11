@@ -1,0 +1,118 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "E6F50C18",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "1A64C69E",
+      "localizations" : [
+        {
+          "description" : "AIアドバイス、食事記録、栄養管理で健康的な毎日をサポートします。",
+          "displayName" : "カロ研",
+          "locale" : "ja"
+        }
+      ],
+      "name" : "カロ研課金",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "6900",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "505A1101",
+          "introductoryOffer" : {
+            "internalID" : "68D1D648",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "全機能が使い放題！AIアドバイス、食事記録、栄養管理で健康的な毎日をサポートします。年額プランなら月額より約40%お得！",
+              "displayName" : "カロ研-年額プラン",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "com.caloken.subscription.yearly",
+          "promotionalImageID" : "6C86D07A",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "カロ研 年額プラン",
+          "subscriptionGroupID" : "1A64C69E",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "980",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "826E915F",
+          "introductoryOffer" : {
+            "internalID" : "CFBFD1FD",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "全機能が使い放題！AIアドバイス、食事記録、栄養管理で健康的な毎日をサポートします。",
+              "displayName" : "カロ研-月額プラン",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "com.caloken.subscription.monthly",
+          "promotionalImageID" : "6C86D07A",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "カロ研 月額プラン",
+          "subscriptionGroupID" : "1A64C69E",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

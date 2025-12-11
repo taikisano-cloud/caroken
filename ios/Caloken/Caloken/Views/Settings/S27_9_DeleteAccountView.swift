@@ -160,10 +160,14 @@ struct S27_9_DeleteAccountView: View {
         .navigationTitle("アカウント削除")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showFinalConfirmation) {
-            FinalConfirmationView(onDeleted: {
-                dismiss()
-                onAccountDeleted?()
-            })
+            FinalConfirmationView(
+                reason: selectedReason?.rawValue ?? "",
+                otherReason: otherReason,
+                onDeleted: {
+                    dismiss()
+                    onAccountDeleted?()
+                }
+            )
         }
     }
 }
@@ -222,9 +226,15 @@ struct AlternativeRow: View {
 
 // MARK: - 最終確認画面
 struct FinalConfirmationView: View {
+    let reason: String
+    let otherReason: String
+    
     @State private var confirmText: String = ""
     @State private var isDeleting: Bool = false
+    @State private var showError: Bool = false
+    @State private var errorMessage: String = ""
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var authService = AuthService.shared
     
     var onDeleted: (() -> Void)?
     
@@ -282,12 +292,16 @@ struct FinalConfirmationView: View {
                         deleteAccount()
                     } label: {
                         if isDeleting {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(Color.red.opacity(0.5))
-                                .cornerRadius(12)
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                Text("削除中...")
+                                    .foregroundColor(.white)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.red.opacity(0.5))
+                            .cornerRadius(12)
                         } else {
                             Text("アカウントを削除する")
                                 .font(.system(size: 17, weight: .semibold))
@@ -306,20 +320,46 @@ struct FinalConfirmationView: View {
             .background(Color(UIColor.systemBackground))
             .navigationTitle("アカウント削除")
             .navigationBarTitleDisplayMode(.inline)
+            .alert("エラー", isPresented: $showError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
+            }
         }
     }
     
     private func deleteAccount() {
         isDeleting = true
         
-        // アカウント削除処理
-        // TODO: 実際の削除ロジック（Firebase Auth, Supabase等）
-        print("Deleting account...")
+        print("🗑️ Starting account deletion...")
+        print("   Reason: \(reason)")
+        if !otherReason.isEmpty {
+            print("   Other reason: \(otherReason)")
+        }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            isDeleting = false
-            dismiss()
-            onDeleted?()
+        Task {
+            do {
+                // AuthServiceでアカウント削除を実行（理由も送信）
+                try await authService.deleteAccount(reason: reason, otherReason: otherReason)
+                
+                await MainActor.run {
+                    isDeleting = false
+                    print("✅ Account deleted successfully")
+                    
+                    // UserProfileManagerもリセット
+                    UserProfileManager.shared.resetAllData()
+                    
+                    dismiss()
+                    onDeleted?()
+                }
+            } catch {
+                await MainActor.run {
+                    isDeleting = false
+                    errorMessage = "アカウント削除に失敗しました: \(error.localizedDescription)"
+                    showError = true
+                    print("❌ Delete account error: \(error)")
+                }
+            }
         }
     }
 }

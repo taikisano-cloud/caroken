@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleGetInfoString</key>
 	<string>Privacy - User Notifications Usage Description</string>
+	<key>CFBundleIconFile</key>
+	<string></string>
 	<key>CFBundleSignature</key>
 	<string></string>
 	<key>CFBundleURLTypes</key>

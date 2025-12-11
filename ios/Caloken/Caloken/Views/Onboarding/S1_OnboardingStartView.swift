@@ -9,7 +9,7 @@ struct S1_OnboardingStartView: View {
             ZStack {
                 // 背景（動画またはフォールバック）
                 if videoLoadError {
-                    // フォールバック背景（ダーク/ライトモード対応）
+                    // フォールバック背景
                     Color(UIColor.systemBackground)
                         .ignoresSafeArea()
                 } else {
@@ -106,7 +106,6 @@ class LoopingVideoPlayerUIView: UIView {
     init(videoName: String, onError: (() -> Void)?) {
         self.onError = onError
         super.init(frame: .zero)
-        // ダーク/ライトモード対応の背景色
         backgroundColor = UIColor.systemBackground
         setupPlayer(videoName: videoName)
     }
@@ -116,20 +115,43 @@ class LoopingVideoPlayerUIView: UIView {
     }
     
     private func setupPlayer(videoName: String) {
-        // 複数の拡張子を試す
-        let extensions = ["mp4", "mov", "m4v", "MP4", "MOV", "M4V"]
         var videoURL: URL?
         
+        // 1. まずBundle内のファイルを探す（複数の拡張子を試す）
+        let extensions = ["mp4", "mov", "m4v", "MP4", "MOV", "M4V"]
         for ext in extensions {
             if let url = Bundle.main.url(forResource: videoName, withExtension: ext) {
                 videoURL = url
-                print("✅ Video found: \(videoName).\(ext)")
+                print("✅ Video found in Bundle: \(videoName).\(ext)")
                 break
             }
         }
         
+        // 2. Assets Catalogから動画を取得（iOS 17+対応）
+        if videoURL == nil {
+            // Assets内のData Setとして動画がある場合
+            if let asset = NSDataAsset(name: videoName) {
+                // 一時ファイルに書き出して再生
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(videoName).mp4")
+                do {
+                    // 既存のファイルがあれば削除
+                    if FileManager.default.fileExists(atPath: tempURL.path) {
+                        try FileManager.default.removeItem(at: tempURL)
+                    }
+                    try asset.data.write(to: tempURL)
+                    videoURL = tempURL
+                    print("✅ Video loaded from Assets: \(videoName)")
+                } catch {
+                    print("❌ Failed to write video from Assets: \(error)")
+                }
+            }
+        }
+        
+        // 3. ファイルが見つからない場合
         guard let url = videoURL else {
             print("❌ Video file not found: \(videoName)")
+            print("   - Checked Bundle for: \(extensions.map { "\(videoName).\($0)" }.joined(separator: ", "))")
+            print("   - Checked Assets Catalog")
             DispatchQueue.main.async {
                 self.onError?()
             }
@@ -156,6 +178,16 @@ class LoopingVideoPlayerUIView: UIView {
         ) { [weak self] _ in
             self?.player?.seek(to: .zero)
             self?.player?.play()
+        }
+        
+        // エラー監視
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            print("❌ Video playback failed")
+            self?.onError?()
         }
         
         player?.play()

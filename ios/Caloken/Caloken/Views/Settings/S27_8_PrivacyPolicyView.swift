@@ -131,7 +131,7 @@ struct S27_8_PrivacyPolicyView: View {
                     
                     株式会社Stella Creation
                     住所：神奈川県川崎市多摩区宿河原5-25-23
-                    メールアドレス：guppy9750@gmail.com
+                    メールアドレス：support@stellacreation.com
                     """
                 )
                 

@@ -4,7 +4,7 @@ import StoreKit
 import HealthKit
 
 // HealthKitを使用するかどうかのフラグ
-private let useHealthKit = false
+private let useHealthKit = true
 
 struct S2_OnboardingFlowView: View {
     @State private var currentStep: Int = 0
@@ -731,9 +731,17 @@ struct NotificationPermissionView: View {
 }
 
 struct HealthKitConnectionView: View {
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    
     var body: some View {
         VStack(spacing: 24) {
-            Spacer().frame(height: 60)
+            Spacer().frame(height: 40)
+            
+            // 通知が未許可の場合の警告
+            if notificationStatus == .denied {
+                NotificationWarningBanner()
+            }
+            
             ZStack {
                 RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)).frame(width: 120, height: 120).shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
                 Image(systemName: "heart.fill").font(.system(size: 50)).foregroundColor(.red)
@@ -747,6 +755,57 @@ struct HealthKitConnectionView: View {
             }.padding(.horizontal, 48).padding(.top, 16)
             Spacer()
         }
+        .onAppear {
+            checkNotificationStatus()
+        }
+    }
+    
+    private func checkNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                notificationStatus = settings.authorizationStatus
+            }
+        }
+    }
+}
+
+struct NotificationWarningBanner: View {
+    var body: some View {
+        Button {
+            // 設定アプリを開く
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsURL)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("通知が許可されていません")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.primary)
+                    Text("タップして設定を開く")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.gray)
+            }
+            .padding(16)
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .padding(.horizontal, 24)
     }
 }
 

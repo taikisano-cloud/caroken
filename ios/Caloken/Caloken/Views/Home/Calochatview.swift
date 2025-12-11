@@ -201,8 +201,8 @@ struct CaloChatView: View {
         VStack(spacing: 24) {
             Spacer()
             
-            if UIImage(named: "caloken_character") != nil {
-                Image("caloken_character")
+            if UIImage(named: "caloken_full") != nil {
+                Image("caloken_full")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 80, height: 80)

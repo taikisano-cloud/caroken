@@ -167,7 +167,7 @@ struct S27_7_TermsOfServiceView: View {
                     
                     名称：株式会社Stella Creation
                     住所：神奈川県川崎市多摩区宿河原5-25-23
-                    連絡先：guppy9750@gmail.com
+                    連絡先：support@stellacreation.com
                     """
                 )
                 

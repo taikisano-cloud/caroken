@@ -12,6 +12,7 @@
 
 /* Begin PBXFileReference section */
 		4A31D0CF2ED1B7690027FE67 /* caloken.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = caloken.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4AE358612EEAC4F400955934 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Configuration.storekit; path = Caloken/Views/Onboarding/com.caloken.subscription.storekit/Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,6 +51,7 @@
 		4A31D0C62ED1B7690027FE67 = {
 			isa = PBXGroup;
 			children = (
+				4AE358612EEAC4F400955934 /* Configuration.storekit */,
 				4A31D0D12ED1B7690027FE67 /* Caloken */,
 				4A9409312ED9706A0087F3FC /* Frameworks */,
 				4A31D0D02ED1B7690027FE67 /* Products */,
@@ -278,7 +280,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3BABH63BYJ;
+				DEVELOPMENT_TEAM = P3V54MYBMJ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -287,8 +289,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "カロ研";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "食事を撮影して栄養素を分析します";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "歩数や運動データを記録するために使用します";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "歩数や運動データを記録するために使用します";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "カロ研はApple Healthから体重、歩数、アクティブカロリーを取得して健康管理をサポートします。";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "カロ研は記録した体重と栄養データをApple Healthに保存します。";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";
@@ -308,7 +310,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = StellaCreation.Caloken;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stellacreation.caloken;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -334,7 +336,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3BABH63BYJ;
+				DEVELOPMENT_TEAM = P3V54MYBMJ;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
@@ -343,8 +345,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "カロ研";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "食事を撮影して栄養素を分析します";
-				INFOPLIST_KEY_NSHealthShareUsageDescription = "歩数や運動データを記録するために使用します";
-				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "歩数や運動データを記録するために使用します";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "カロ研はApple Healthから体重、歩数、アクティブカロリーを取得して健康管理をサポートします。";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "カロ研は記録した体重と栄養データをApple Healthに保存します。";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "音声入力のためにマイクを使用します";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "写真から食事を選択して栄養素を分析します";
@@ -364,7 +366,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = StellaCreation.Caloken;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stellacreation.caloken;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
