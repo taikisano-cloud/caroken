@@ -226,18 +226,31 @@ struct CalorieWithAdviceCard: View {
     var current: Int { logsManager.totalCalories(for: selectedDate) }
     var mealCount: Int { logsManager.logs(for: selectedDate).count }
     
-    // 各食事タイプのカウント
+    // 各食事タイプのカウント（時間帯から推測）
     var breakfastCount: Int {
-        logsManager.logs(for: selectedDate).filter { $0.mealType == .breakfast }.count
+        logsManager.logs(for: selectedDate).filter { log in
+            let hour = Calendar.current.component(.hour, from: log.time)
+            return hour >= 5 && hour < 10  // 5:00〜9:59 = 朝食
+        }.count
     }
     var lunchCount: Int {
-        logsManager.logs(for: selectedDate).filter { $0.mealType == .lunch }.count
+        logsManager.logs(for: selectedDate).filter { log in
+            let hour = Calendar.current.component(.hour, from: log.time)
+            return hour >= 10 && hour < 15  // 10:00〜14:59 = 昼食
+        }.count
     }
     var dinnerCount: Int {
-        logsManager.logs(for: selectedDate).filter { $0.mealType == .dinner }.count
+        logsManager.logs(for: selectedDate).filter { log in
+            let hour = Calendar.current.component(.hour, from: log.time)
+            return hour >= 17 && hour < 22  // 17:00〜21:59 = 夕食
+        }.count
     }
     var snackCount: Int {
-        logsManager.logs(for: selectedDate).filter { $0.mealType == .snack }.count
+        logsManager.logs(for: selectedDate).filter { log in
+            let hour = Calendar.current.component(.hour, from: log.time)
+            // 朝食・昼食・夕食以外の時間帯 = 間食
+            return (hour >= 15 && hour < 17) || (hour >= 22) || (hour < 5)
+        }.count
     }
     
     var progressRatio: Double {

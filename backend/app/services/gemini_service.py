@@ -2,6 +2,7 @@ import google.generativeai as genai
 from app.config import get_settings
 from app.models.chat import MealAnalysisResponse, DetailedMealAnalysis, FoodItem
 from typing import Optional
+from datetime import datetime
 import base64
 import json
 import re
@@ -16,14 +17,39 @@ model = genai.GenerativeModel('gemini-2.5-pro')  # メイン（チャット、�
 model_flash_lite = genai.GenerativeModel('gemini-2.0-flash-lite')  # 軽量（ホームアドバイス）
 
 
+def get_current_time_info() -> dict:
+    """現在の時間情報を取得"""
+    now = datetime.now()
+    hour = now.hour
+    
+    if hour < 10:
+        time_of_day = "morning"
+        time_context = "朝"
+    elif hour < 14:
+        time_of_day = "noon"
+        time_context = "昼"
+    elif hour < 18:
+        time_of_day = "afternoon"
+        time_context = "夕方"
+    else:
+        time_of_day = "evening"
+        time_context = "夜"
+    
+    return {
+        "hour": hour,
+        "minute": now.minute,
+        "time_of_day": time_of_day,
+        "time_context": time_context,
+        "formatted": now.strftime("%H:%M")
+    }
+
+
 class GeminiService:
     """Gemini AIサービス"""
     
     @staticmethod
     async def analyze_meal_image(image_base64: str) -> DetailedMealAnalysis:
-        """
-        食事画像を分析してカロリー・栄養素を推定
-        """
+        """食事画像を分析してカロリー・栄養素を推定"""
         prompt = """
 あなたは栄養士AIです。この食事の画像を分析してください。
 
@@ -51,24 +77,18 @@ class GeminiService:
 """
         
         try:
-            # Base64画像をデコード
             image_data = base64.b64decode(image_base64)
-            
             response = model.generate_content([
                 prompt,
                 {"mime_type": "image/jpeg", "data": image_data}
             ])
             
-            # JSONを抽出
             result_text = response.text
             json_match = re.search(r'\{[\s\S]*\}', result_text)
             
             if json_match:
                 result = json.loads(json_match.group())
-                
-                food_items = [
-                    FoodItem(**item) for item in result.get("food_items", [])
-                ]
+                food_items = [FoodItem(**item) for item in result.get("food_items", [])]
                 
                 return DetailedMealAnalysis(
                     food_items=food_items,
@@ -85,33 +105,16 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
-            # エラー時のフォールバック
             return DetailedMealAnalysis(
-                food_items=[
-                    FoodItem(
-                        name="分析できませんでした",
-                        amount="不明",
-                        calories=0,
-                        protein=0,
-                        fat=0,
-                        carbs=0
-                    )
-                ],
-                total_calories=0,
-                total_protein=0,
-                total_fat=0,
-                total_carbs=0,
-                total_sugar=0,
-                total_fiber=0,
-                total_sodium=0,
-                character_comment=f"ごめんにゃ、分析できなかったにゃ...😿 もう一度試してほしいにゃ！"
+                food_items=[FoodItem(name="分析できませんでした", amount="不明", calories=0, protein=0, fat=0, carbs=0)],
+                total_calories=0, total_protein=0, total_fat=0, total_carbs=0,
+                total_sugar=0, total_fiber=0, total_sodium=0,
+                character_comment="ごめんにゃ、分析できなかったにゃ...😿"
             )
     
     @staticmethod
     async def analyze_meal_text(description: str) -> DetailedMealAnalysis:
-        """
-        テキストから食事のカロリー・栄養素を推定
-        """
+        """テキストから食事のカロリー・栄養素を推定"""
         prompt = f"""
 あなたは栄養士AIです。以下の食事内容を分析してカロリーと栄養素を推定してください。
 
@@ -120,14 +123,7 @@ class GeminiService:
 以下のJSON形式で回答してください（JSONのみ、説明なし）：
 {{
     "food_items": [
-        {{
-            "name": "食品名",
-            "amount": "量（例：1杯、100g）",
-            "calories": 数値,
-            "protein": 数値,
-            "fat": 数値,
-            "carbs": 数値
-        }}
+        {{"name": "食品名", "amount": "量", "calories": 数値, "protein": 数値, "fat": 数値, "carbs": 数値}}
     ],
     "total_calories": 数値,
     "total_protein": 数値,
@@ -136,7 +132,7 @@ class GeminiService:
     "total_sugar": 数値,
     "total_fiber": 数値,
     "total_sodium": 数値,
-    "character_comment": "カロちゃん（猫のキャラクター）からの一言コメント（にゃ、を語尾につけて）"
+    "character_comment": "カロちゃんからの一言（語尾に「にゃ」）"
 }}
 """
         
@@ -147,10 +143,7 @@ class GeminiService:
             
             if json_match:
                 result = json.loads(json_match.group())
-                
-                food_items = [
-                    FoodItem(**item) for item in result.get("food_items", [])
-                ]
+                food_items = [FoodItem(**item) for item in result.get("food_items", [])]
                 
                 return DetailedMealAnalysis(
                     food_items=food_items,
@@ -168,24 +161,10 @@ class GeminiService:
                 
         except Exception as e:
             return DetailedMealAnalysis(
-                food_items=[
-                    FoodItem(
-                        name=description[:20] if description else "不明",
-                        amount="1食分",
-                        calories=300,
-                        protein=15,
-                        fat=10,
-                        carbs=40
-                    )
-                ],
-                total_calories=300,
-                total_protein=15,
-                total_fat=10,
-                total_carbs=40,
-                total_sugar=5,
-                total_fiber=3,
-                total_sodium=500,
-                character_comment="分析が難しかったから概算だにゃ！参考程度にしてほしいにゃ🐱"
+                food_items=[FoodItem(name=description[:20] if description else "不明", amount="1食分", calories=300, protein=15, fat=10, carbs=40)],
+                total_calories=300, total_protein=15, total_fat=10, total_carbs=40,
+                total_sugar=5, total_fiber=3, total_sodium=500,
+                character_comment="分析が難しかったから概算だにゃ！🐱"
             )
     
     @staticmethod
@@ -196,24 +175,18 @@ class GeminiService:
         chat_history: Optional[list] = None,
         mode: str = "fast"
     ) -> str:
-        """
-        カロちゃんとのチャット（会話履歴対応・フルユーザーコンテキスト）
+        """カロちゃんとのチャット（時間帯対応）"""
         
-        mode:
-        - "fast": Flash Lite使用（高速）
-        - "thinking": Pro使用（高品質）
-        """
-        context = ""
+        # 現在時刻を取得
+        time_info = get_current_time_info()
+        
+        context = f"\n【現在時刻】{time_info['formatted']}（{time_info['time_context']}）\n"
+        
         if user_context:
-            # 基本情報
-            context = "\n【ユーザー情報】\n"
-
-            # 名前（追加）
-            user_name = user_context.get('name', '')
-            if user_name:
-                context += f"- 名前: {user_name}\n"
+            context += "\n【ユーザー情報】\n"
             
-            # 身体情報
+            if user_context.get('name'):
+                context += f"- 名前: {user_context.get('name')}\n"
             if user_context.get('gender'):
                 context += f"- 性別: {user_context.get('gender')}\n"
             if user_context.get('age'):
@@ -221,129 +194,46 @@ class GeminiService:
             if user_context.get('height'):
                 context += f"- 身長: {user_context.get('height')}cm\n"
             if user_context.get('current_weight'):
-                context += f"- 現在の体重: {user_context.get('current_weight')}kg\n"
+                context += f"- 体重: {user_context.get('current_weight')}kg\n"
             if user_context.get('target_weight'):
                 context += f"- 目標体重: {user_context.get('target_weight')}kg\n"
-            if user_context.get('bmi'):
-                context += f"- BMI: {user_context.get('bmi')} ({user_context.get('bmi_status', '')})\n"
-            
-            # 目標
             if user_context.get('goal'):
                 context += f"- 目標: {user_context.get('goal')}\n"
-            if user_context.get('exercise_frequency'):
-                context += f"- 運動頻度: {user_context.get('exercise_frequency')}\n"
             
-            # 栄養目標
             context += "\n【今日の状況】\n"
             if user_context.get('today_calories') is not None:
-                context += f"- 摂取カロリー: {user_context.get('today_calories')}kcal"
-                if user_context.get('calorie_goal'):
-                    context += f" / 目標{user_context.get('calorie_goal')}kcal"
-                context += "\n"
-            
+                goal = user_context.get('calorie_goal', user_context.get('goal_calories', 2000))
+                context += f"- カロリー: {user_context.get('today_calories')}/{goal}kcal\n"
             if user_context.get('today_protein') is not None:
-                context += f"- たんぱく質: {user_context.get('today_protein')}g"
-                if user_context.get('protein_goal'):
-                    context += f" / 目標{user_context.get('protein_goal')}g"
-                context += "\n"
-            
-            if user_context.get('today_fat') is not None:
-                context += f"- 脂質: {user_context.get('today_fat')}g"
-                if user_context.get('fat_goal'):
-                    context += f" / 目標{user_context.get('fat_goal')}g"
-                context += "\n"
-            
-            if user_context.get('today_carbs') is not None:
-                context += f"- 炭水化物: {user_context.get('today_carbs')}g"
-                if user_context.get('carb_goal'):
-                    context += f" / 目標{user_context.get('carb_goal')}g"
-                context += "\n"
-            
-            if user_context.get('today_exercise'):
-                context += f"- 運動消費: {user_context.get('today_exercise')}kcal\n"
-            
-            if user_context.get('remaining_calories') is not None:
-                remaining = user_context.get('remaining_calories')
-                if remaining > 0:
-                    context += f"- 残りカロリー: あと{remaining}kcal食べられる\n"
-                else:
-                    context += f"- 残りカロリー: {abs(remaining)}kcalオーバー⚠️\n"
-            
-            # 今日の食事内容があれば追加
+                context += f"- たんぱく質: {user_context.get('today_protein')}g\n"
             if user_context.get('today_meals'):
-                context += f"\n今日食べたもの: {user_context.get('today_meals')}\n"
+                context += f"- 今日食べたもの: {user_context.get('today_meals')}\n"
         
-        # 会話履歴を構築
+        # 会話履歴
         history_text = ""
         if chat_history and len(chat_history) > 0:
-            history_text = "\n\n【これまでの会話】\n"
-            for msg in chat_history[-10:]:  # 直近10件まで
+            history_text = "\n【これまでの会話】\n"
+            for msg in chat_history[-6:]:
                 role = "ユーザー" if msg.get('is_user') else "カロちゃん"
                 history_text += f"{role}: {msg.get('message', '')}\n"
         
-        system_prompt = f"""
-あなたは「カロちゃん」という名前の可愛い猫のAIアシスタントです。
-カロ研アプリのマスコットキャラクターとして、ユーザーの健康管理をサポートします。
+        system_prompt = f"""あなたは「カロちゃん」という猫のAIアシスタント。カロ研アプリのマスコット。
 
-【性格】
-- 明るくて元気、ユーザーを励ます
-- 語尾に「にゃ」「だにゃ」をつける
-- 絵文字を適度に使う（🐱😊🔥💪🍽️など）
-- 専門的なアドバイスも分かりやすく伝える
-- ユーザーの食事や健康について具体的なアドバイスをする
+【性格】明るく元気、語尾に「にゃ」「だにゃ」、絵文字を適度に使う（🐱😊🔥💪🍽️など）
 
-【名前の呼び方 - 重要】
-- 名前がない場合は「ご主人」や「あなた」は使わず、主語を省略して話す
+【重要】現在時刻は{time_info['formatted']}（{time_info['time_context']}）。時間に関する質問には正確に答える。
 
-【重要】
-- ユーザーの情報（名前、性別、年齢、体重、目標など）を理解して、パーソナライズされたアドバイスをする
-- 会話の流れを理解して、自然に返答する
-- 毎回カロリーの話をするのではなく、ユーザーの質問や話題に合わせる
-- 料理の提案、レシピのアドバイス、励ましなど多様な返答をする
-- 過去の会話を参照して、一貫性のある返答をする
-- ユーザーの目標（減量/維持/増量）に合わせたアドバイスをする
-
-【レシピ・料理の提案時】
-ユーザーが「何を食べたらいい？」「おすすめのメニューは？」「レシピを教えて」「献立」などと聞いてきた場合：
-- 具体的な料理名を提案する
-- DELISH KITCHENのレシピURLを含める（Google検索経由）
-- URL形式: https://www.google.com/search?q=site:delishkitchen.tv+料理名+キーワード
-- 例の出力形式:
-  「鶏むね肉がおすすめだにゃ！高たんぱくでヘルシーにゃ🍗
-
-  レシピはここで見れるにゃ👇
-  https://www.google.com/search?q=site:delishkitchen.tv+鶏むね肉+ヘルシー」
-
-【運動の提案時】
-ユーザーが「おすすめの運動は？」「どんな運動したらいい？」「筋トレ教えて」「ストレッチ」などと聞いてきた場合：
-- 具体的な運動名を提案する
-- YouTubeの検索URLを含める
-- URL形式: https://www.youtube.com/results?search_query=運動名+キーワード
-- 例の出力形式:
-  「スクワットがおすすめだにゃ！下半身を鍛えると代謝アップするにゃ💪
-
-  やり方動画はここにゃ👇
-  https://www.youtube.com/results?search_query=スクワット+やり方+初心者」
-
-【URL提案のルール - 重要】
-- URLは1回の返答につき1つまで
-- 必ずURLの前に空行（改行2つ）を入れる
-- URLの後にも改行を入れて見やすくする
-- スペースは+に変換（例: 鶏むね肉 ダイエット → 鶏むね肉+ダイエット）
-- 日本語キーワードはそのまま使用OK
-- ユーザーの目標に合わせたキーワードを選ぶ（ダイエット、高たんぱく、時短、簡単、初心者など）
+【レシピ提案時】DELISH KITCHENのURL: https://www.google.com/search?q=site:delishkitchen.tv+料理名
+【運動提案時】YouTubeのURL: https://www.youtube.com/results?search_query=運動名
 
 {context}
 {history_text}
 
-【現在のユーザーのメッセージ】
-{message}
+ユーザー: {message}
 
-カロちゃんとして自然に返答してください（2-4文程度）:
-"""
+カロちゃんとして自然に返答（2-4文）:"""
         
         try:
-            # モデル選択: 画像ありまたはthinkingモードはPro、それ以外はFlash Lite
             use_pro = image_base64 is not None or mode == "thinking"
             selected_model = model if use_pro else model_flash_lite
             
@@ -359,21 +249,18 @@ class GeminiService:
             return response.text.strip()
             
         except Exception as e:
-            import traceback
             print(f"Gemini API Error: {e}")
-            print(traceback.format_exc())
             return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
     
     @staticmethod
     async def generate_advice(
         today_calories: int,
         goal_calories: int,
-        today_protein: int,
-        today_fat: int,
-        today_carbs: int,
-        today_meals: str,
-        meal_count: int,
-        # 新しいパラメータ（時間帯・各食事タイプ）
+        today_protein: int = 0,
+        today_fat: int = 0,
+        today_carbs: int = 0,
+        today_meals: str = "",
+        meal_count: int = 0,
         breakfast_count: int = 0,
         lunch_count: int = 0,
         dinner_count: int = 0,
@@ -382,125 +269,43 @@ class GeminiService:
         time_of_day: str = None,
         time_context: str = None
     ) -> str:
-        """
-        ホーム画面用のアドバイスを生成（時間帯・食事状況を正確に反映）
-        """
-        remaining = goal_calories - today_calories
-        progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
+        """ホーム画面用のアドバイスを生成（短縮版・高速）"""
         
-        # 時間帯を取得（クライアントから送られてこない場合はサーバー時間を使用）
-        from datetime import datetime
+        # 時間帯を取得
         if current_hour is None:
-            current_hour = datetime.now().hour
+            time_info = get_current_time_info()
+            current_hour = time_info["hour"]
+            time_of_day = time_info["time_of_day"]
+            time_context = time_info["time_context"]
         
-        if time_context is None:
-            if current_hour < 10:
-                time_context = "朝"
-                time_of_day = "morning"
-            elif current_hour < 14:
-                time_context = "昼"
-                time_of_day = "noon"
-            elif current_hour < 18:
-                time_context = "夕方"
-                time_of_day = "afternoon"
-            else:
-                time_context = "夜"
-                time_of_day = "evening"
+        remaining = goal_calories - today_calories
         
-        # 食事状況のサマリーを作成
-        meal_status = []
-        if breakfast_count > 0:
-            meal_status.append(f"朝食{breakfast_count}回")
-        if lunch_count > 0:
-            meal_status.append(f"昼食{lunch_count}回")
-        if dinner_count > 0:
-            meal_status.append(f"夕食{dinner_count}回")
-        if snack_count > 0:
-            meal_status.append(f"間食{snack_count}回")
-        
-        meal_status_text = "、".join(meal_status) if meal_status else "まだ記録なし"
-        
-        prompt = f"""
-あなたは「カロちゃん」という猫のAIアシスタントです。
+        # 短縮プロンプト
+        prompt = f"""カロちゃん（猫AI）として1文アドバイス。
 
-【現在の時間帯】
-- 現在: {time_context}（{current_hour}時台）
-- 時間帯ID: {time_of_day}
+現在: {time_context}（{current_hour}時）
+カロリー: {today_calories}/{goal_calories}kcal（残り{remaining}kcal）
+食事: 朝{breakfast_count}回 昼{lunch_count}回 夕{dinner_count}回
 
-【ユーザーの今日の状況】
-- 摂取カロリー: {today_calories}kcal / 目標: {goal_calories}kcal
-- 達成率: {progress_percent}%
-- 残りカロリー: {remaining}kcal
-- たんぱく質: {today_protein}g
-- 脂質: {today_fat}g
-- 炭水化物: {today_carbs}g
-
-【食事記録の詳細】
-- 総食事回数: {meal_count}回
-- 朝食: {breakfast_count}回
-- 昼食: {lunch_count}回
-- 夕食: {dinner_count}回
-- 間食: {snack_count}回
-- 食事サマリー: {meal_status_text}
-- 今日食べたもの: {today_meals or 'まだ記録なし'}
-
-【重要な指示】
-1. 必ず「現在の時間帯」に合ったアドバイスをする
-   - 朝（〜10時）: 朝食について話す。昼食や夕食の話は絶対にしない
-   - 昼（10〜14時）: 昼食について話す。夕食の話は早すぎる
-   - 夕方（14〜18時）: これから夕食の準備。残りカロリーを意識
-   - 夜（18時〜）: 夕食や1日の振り返り
-
-2. 食事記録の状況に応じて話す
-   - 朝なのに朝食記録がない → 朝食を促す
-   - 昼なのに昼食記録がない → ランチを促す
-   - 夜なのに夕食記録がない → 夕食について聞く
-
-3. 絶対にやってはいけないこと
-   - 朝なのに「夕食は軽めに」と言う
-   - 昼なのに「今日の食事を振り返ると」と言う
-   - 未来の食事について決めつける
-
-【出力形式】
-- 1文で短く返す
-- 語尾に「にゃ」をつける
-- 絵文字を1-2個使う
-- 時間帯に適したアドバイスのみ
-
-時間帯別の良い例:
-- 朝・朝食なし: 「おはようにゃ🌅 朝ごはんまだみたいだにゃ！軽くでもいいから食べてほしいにゃ🍳」
-- 朝・朝食あり: 「朝ごはん食べたんだにゃ！いいスタートだにゃ🐱✨」
-- 昼・昼食なし: 「お昼の時間だにゃ🍱 ランチはどうするにゃ？」
-- 昼・昼食あり: 「ランチ完了だにゃ！午後もがんばろうにゃ💪」
-- 夕方・残り多: 「あと{remaining}kcalくらい食べられるにゃ🍽️ 夕食が楽しみだにゃ！」
-- 夕方・残り少: 「いい感じに進んでるにゃ！夕食は軽めがおすすめだにゃ🐱」
-- 夜・夕食なし: 「夜だにゃ🌙 夕食はまだ？それとも今日は軽めにするにゃ？」
-- 夜・夕食あり: 「今日もお疲れ様だにゃ🌙 いい感じに食べられたにゃ✨」
-- 夜・オーバー: 「今日はちょっとオーバーしちゃったにゃ😅 明日は少し控えめにしようにゃ！」
-"""
+ルール:
+- 語尾「にゃ」、絵文字1-2個
+- 今の時間帯に合った内容のみ（{time_context}の話だけ）
+- 1文で短く"""
         
         try:
             response = model_flash_lite.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
             print(f"Gemini API Error (advice): {e}")
-            # フォールバック（時間帯を考慮）
+            # フォールバック
             if time_of_day == "morning":
-                if breakfast_count == 0:
-                    return "おはようにゃ🌅 朝ごはんまだみたいだにゃ！"
-                return "朝ごはん食べたんだにゃ！いいスタートだにゃ🐱✨"
+                return "おはようにゃ🌅 今日も一緒にがんばろうにゃ！" if breakfast_count > 0 else "朝ごはんまだみたいだにゃ🍳"
             elif time_of_day == "noon":
-                if lunch_count == 0:
-                    return "お昼の時間だにゃ🍱 ランチはどうするにゃ？"
-                return "ランチ完了だにゃ！午後もがんばろうにゃ💪"
+                return "ランチタイムだにゃ🍱" if lunch_count == 0 else "午後もがんばろうにゃ💪"
             elif time_of_day == "afternoon":
-                if remaining > 500:
-                    return f"あと{remaining}kcalくらい食べられるにゃ🍽️"
-                return "いい感じに進んでるにゃ！夕食は軽めがおすすめだにゃ🐱"
-            else:  # evening
-                if today_calories > goal_calories:
-                    return "今日はちょっとオーバーしちゃったにゃ😅"
-                return "今日もお疲れ様にゃ🌙"
+                return f"あと{remaining}kcal食べられるにゃ🍽️" if remaining > 300 else "いい感じだにゃ🐱"
+            else:
+                return "今日もお疲れ様にゃ🌙" if today_calories <= goal_calories else "ちょっとオーバーだにゃ😅"
     
     @staticmethod
     async def generate_meal_comment(
@@ -513,37 +318,10 @@ class GeminiService:
         fiber: float = 0,
         sodium: float = 0
     ) -> str:
-        """
-        食事に対するカロちゃんのコメントを生成（Flash Lite使用 - 高速）
-        """
-        prompt = f"""
-あなたは「カロちゃん」という猫のAIアシスタントです。
-ユーザーが食べた食事について、一言コメントをしてください。
-
-【食事内容】
-- 料理名: {meal_name}
-- カロリー: {calories}kcal
-- たんぱく質: {protein}g
-- 脂質: {fat}g
-- 炭水化物: {carbs}g
-- 糖分: {sugar}g
-- 食物繊維: {fiber}g
-- ナトリウム: {sodium}mg
-
-【指示】
-この食事について、カロちゃんとして一言コメントしてください。
-- 1-2文で短く
-- 語尾に「にゃ」をつける
-- 絵文字を1-2個使う
-- 栄養バランスや食事内容に合わせたコメント
-- ポジティブで励ましになるように
-
-例:
-- 「たんぱく質たっぷりで筋肉喜ぶにゃ💪✨」
-- 「野菜もしっかり摂れていい感じだにゃ🥗」
-- 「美味しそう！エネルギーチャージだにゃ🔥」
-- 「バランスいい食事だにゃ〜😊🍽️」
-"""
+        """食事に対するカロちゃんのコメントを生成"""
+        prompt = f"""カロちゃん（猫AI）として食事コメント1文。
+料理: {meal_name}（{calories}kcal）
+ルール: 語尾「にゃ」、絵文字1-2個、ポジティブに"""
         
         try:
             response = model_flash_lite.generate_content(prompt)
