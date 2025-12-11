@@ -117,36 +117,45 @@ async def get_feature_request(
         supabase = get_supabase_admin()
         user_id = current_user["id"]
         
-        # リクエストを取得
-        req_response = supabase.table("feature_requests").select(
-            "*, profiles!feature_requests_author_id_fkey(display_name)"
-        ).eq("id", request_id).single().execute()
+        # リクエストを取得（JOINなし）
+        req_response = supabase.table("feature_requests").select("*").eq("id", request_id).execute()
         
-        if not req_response.data:
+        if not req_response.data or len(req_response.data) == 0:
             raise HTTPException(status_code=404, detail="Request not found")
         
-        req = req_response.data
-        author_name = req.get("profiles", {}).get("display_name", "匿名")
+        req = req_response.data[0]
+        
+        # 作者名を取得
+        author_name = "匿名"
+        try:
+            profile_response = supabase.table("profiles").select("display_name").eq("id", req["author_id"]).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                author_name = profile_response.data[0].get("display_name") or "匿名"
+        except:
+            pass
         
         # 投票確認
-        vote_response = supabase.table("feature_request_votes").select(
-            "id"
-        ).eq("request_id", request_id).eq("user_id", user_id).execute()
+        vote_response = supabase.table("feature_request_votes").select("id").eq("request_id", request_id).eq("user_id", user_id).execute()
+        has_voted = len(vote_response.data or []) > 0
         
-        has_voted = len(vote_response.data) > 0
-        
-        # コメントを取得
-        comments_response = supabase.table("feature_request_comments").select(
-            "*, profiles!feature_request_comments_user_id_fkey(display_name)"
-        ).eq("request_id", request_id).order("created_at", desc=True).execute()
+        # コメントを取得（JOINなし）
+        comments_response = supabase.table("feature_request_comments").select("*").eq("request_id", request_id).order("created_at", desc=True).execute()
         
         comments = []
-        for c in comments_response.data:
-            display_name = c.get("profiles", {}).get("display_name", "匿名")
+        for c in (comments_response.data or []):
+            # コメント投稿者名を取得
+            commenter_name = "匿名"
+            try:
+                commenter_profile = supabase.table("profiles").select("display_name").eq("id", c["user_id"]).execute()
+                if commenter_profile.data and len(commenter_profile.data) > 0:
+                    commenter_name = commenter_profile.data[0].get("display_name") or "匿名"
+            except:
+                pass
+            
             comments.append(CommentResponse(
                 id=c["id"],
                 user_id=c["user_id"],
-                display_name=display_name,
+                display_name=commenter_name,
                 content=c["content"],
                 created_at=c["created_at"],
                 is_owner=c["user_id"] == user_id
@@ -158,8 +167,8 @@ async def get_feature_request(
             author_name=author_name,
             title=req["title"],
             description=req["description"],
-            votes=req["votes"],
-            status=req["status"],
+            votes=req["votes"] or 0,
+            status=req["status"] or "pending",
             has_voted=has_voted,
             is_owner=req["author_id"] == user_id,
             comments=comments,
@@ -253,14 +262,12 @@ async def delete_feature_request(
         user_id = current_user["id"]
         
         # 所有者確認
-        req_response = supabase.table("feature_requests").select(
-            "author_id"
-        ).eq("id", request_id).single().execute()
+        req_response = supabase.table("feature_requests").select("author_id").eq("id", request_id).execute()
         
-        if not req_response.data:
+        if not req_response.data or len(req_response.data) == 0:
             raise HTTPException(status_code=404, detail="Request not found")
         
-        if req_response.data["author_id"] != user_id:
+        if req_response.data[0]["author_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         
         # 削除（CASCADE設定により投票・コメントも削除される）
@@ -336,14 +343,20 @@ async def add_comment(
         }
         
         response = supabase.table("feature_request_comments").insert(comment_data).execute()
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create comment")
+        
         c = response.data[0]
         
         # 作成者の名前を取得
-        profile_response = supabase.table("profiles").select(
-            "display_name"
-        ).eq("id", user_id).single().execute()
-        
-        display_name = profile_response.data.get("display_name", "匿名") if profile_response.data else "匿名"
+        display_name = "あなた"
+        try:
+            profile_response = supabase.table("profiles").select("display_name").eq("id", user_id).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                display_name = profile_response.data[0].get("display_name") or "あなた"
+        except:
+            pass
         
         return CommentResponse(
             id=c["id"],
@@ -354,6 +367,8 @@ async def add_comment(
             is_owner=True
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error adding comment: {e}")
         raise HTTPException(
@@ -374,14 +389,12 @@ async def delete_comment(
         user_id = current_user["id"]
         
         # 所有者確認
-        comment_response = supabase.table("feature_request_comments").select(
-            "user_id"
-        ).eq("id", comment_id).single().execute()
+        comment_response = supabase.table("feature_request_comments").select("user_id").eq("id", comment_id).execute()
         
-        if not comment_response.data:
+        if not comment_response.data or len(comment_response.data) == 0:
             raise HTTPException(status_code=404, detail="Comment not found")
         
-        if comment_response.data["user_id"] != user_id:
+        if comment_response.data[0]["user_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
         
         # 削除
