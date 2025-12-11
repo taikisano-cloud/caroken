@@ -7,12 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4A30D7D22EEACD2300B0DEF5 /* Configuration.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 4A30D7D12EEACD2300B0DEF5 /* Configuration.storekit */; };
 		4A9409332ED9706A0087F3FC /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 4A9409322ED9706A0087F3FC /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4A30D7D12EEACD2300B0DEF5 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Configuration.storekit; sourceTree = "<group>"; };
 		4A31D0CF2ED1B7690027FE67 /* caloken.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = caloken.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		4AE358612EEAC4F400955934 /* Configuration.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Configuration.storekit; path = Caloken/Views/Onboarding/com.caloken.subscription.storekit/Configuration.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,7 +52,7 @@
 		4A31D0C62ED1B7690027FE67 = {
 			isa = PBXGroup;
 			children = (
-				4AE358612EEAC4F400955934 /* Configuration.storekit */,
+				4A30D7D12EEACD2300B0DEF5 /* Configuration.storekit */,
 				4A31D0D12ED1B7690027FE67 /* Caloken */,
 				4A9409312ED9706A0087F3FC /* Frameworks */,
 				4A31D0D02ED1B7690027FE67 /* Products */,
@@ -141,6 +142,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4A30D7D22EEACD2300B0DEF5 /* Configuration.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

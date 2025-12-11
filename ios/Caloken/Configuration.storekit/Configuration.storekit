@@ -1,0 +1,109 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "1E428A41",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ja",
+    "_renewalBillingIssuesEnabled" : true,
+    "_storefront" : "JPN",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "11706B42",
+      "localizations" : [
+
+      ],
+      "name" : "Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "980",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "502CC0A5",
+          "introductoryOffer" : {
+            "internalID" : "9BBEBB63",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.caloken.subscription",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "カロ研-月額プラン",
+          "subscriptionGroupID" : "11706B42",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "6800",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "ABB7C4B6",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "",
+              "displayName" : "",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.caloken.subscription",
+          "promotionalImageID" : "186F2C4D",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "カロ研-年額プラン",
+          "subscriptionGroupID" : "11706B42",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
