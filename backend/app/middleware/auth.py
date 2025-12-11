@@ -23,7 +23,7 @@ async def get_current_user(
         # Supabaseは独自のJWT形式を使用
         payload = jwt.decode(
             token,
-            settings.supabase_anon_key,
+            settings.supabase_key,
             algorithms=["HS256"],
             options={"verify_aud": False}
         )
