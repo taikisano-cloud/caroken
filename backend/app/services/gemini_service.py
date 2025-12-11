@@ -18,8 +18,12 @@ model_flash_lite = genai.GenerativeModel('gemini-2.0-flash-lite')  # 軽量（�
 
 
 def get_current_time_info() -> dict:
-    """現在の時間情報を取得"""
-    now = datetime.now()
+    """現在の時間情報を取得（日本時間）"""
+    import pytz
+    
+    # 日本時間を取得
+    jst = pytz.timezone('Asia/Tokyo')
+    now = datetime.now(jst)
     hour = now.hour
     
     if hour < 10:

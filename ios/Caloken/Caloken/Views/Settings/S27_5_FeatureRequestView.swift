@@ -1,74 +1,110 @@
 import SwiftUI
 
 struct S27_5_FeatureRequestView: View {
-    @State private var requests: [FeatureRequest] = FeatureRequest.sampleData.sorted { $0.votes > $1.votes }
+    @State private var requests: [FeatureRequestLocal] = []
+    @State private var isLoading: Bool = true
     @State private var showNewRequestSheet: Bool = false
-    @State private var selectedRequest: FeatureRequest? = nil
-    @State private var requestToDelete: FeatureRequest? = nil
+    @State private var selectedRequest: FeatureRequestLocal? = nil
+    @State private var requestToDelete: FeatureRequestLocal? = nil
     @State private var showDeleteAlert: Bool = false
-    
-    // 現在のユーザーID（仮）
-    private let currentUserId = "current_user"
+    @State private var errorMessage: String? = nil
     
     var body: some View {
         ZStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(requests) { request in
-                        Button {
-                            selectedRequest = request
-                        } label: {
-                            FeatureRequestRow(
-                                request: request,
-                                hasVoted: request.votedUserIds.contains(currentUserId),
-                                isOwner: request.authorId == currentUserId,
-                                onVote: {
-                                    toggleVote(for: request)
-                                },
-                                onDelete: {
-                                    requestToDelete = request
-                                    showDeleteAlert = true
-                                }
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        Divider()
-                            .padding(.leading, 16)
+            if isLoading {
+                ProgressView("読み込み中...")
+            } else if let error = errorMessage {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("再読み込み") {
+                        loadRequests()
                     }
+                    .foregroundColor(.orange)
                 }
-                .padding(.bottom, 100)
-            }
-            
-            // 新規提案ボタン
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Button {
-                        showNewRequestSheet = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("新規提案")
-                                .font(.system(size: 16, weight: .bold))
+                .padding()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if requests.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "lightbulb")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(.orange)
+                                Text("まだ提案がありません")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("新しい機能のアイデアを提案してみましょう！")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 60)
+                        } else {
+                            ForEach(requests) { request in
+                                Button {
+                                    selectedRequest = request
+                                } label: {
+                                    FeatureRequestRow(
+                                        request: request,
+                                        onVote: {
+                                            toggleVote(for: request)
+                                        },
+                                        onDelete: {
+                                            requestToDelete = request
+                                            showDeleteAlert = true
+                                        }
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Divider()
+                                    .padding(.leading, 16)
+                            }
                         }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 14)
-                        .background(Color.orange)
-                        .cornerRadius(25)
-                        .shadow(color: Color.orange.opacity(0.4), radius: 8, x: 0, y: 4)
                     }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, 100)
+                }
+                
+                // 新規提案ボタン
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            showNewRequestSheet = true
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("新規提案")
+                                    .font(.system(size: 16, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 14)
+                            .background(Color.orange)
+                            .cornerRadius(25)
+                            .shadow(color: Color.orange.opacity(0.4), radius: 8, x: 0, y: 4)
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 32)
+                    }
                 }
             }
         }
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("機能ウィッシュリスト")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            loadRequests()
+        }
+        .refreshable {
+            await refreshRequests()
+        }
         .alert("提案を削除", isPresented: $showDeleteAlert) {
             Button("キャンセル", role: .cancel) {}
             Button("削除", role: .destructive) {
@@ -80,56 +116,165 @@ struct S27_5_FeatureRequestView: View {
             Text("この提案を削除しますか？")
         }
         .sheet(isPresented: $showNewRequestSheet) {
-            NewFeatureRequestSheet(
-                requests: $requests,
-                currentUserId: currentUserId
-            )
+            NewFeatureRequestSheet(onSubmit: { title, description in
+                createRequest(title: title, description: description)
+            })
         }
         .sheet(item: $selectedRequest) { request in
             FeatureRequestDetailView(
-                request: binding(for: request),
-                currentUserId: currentUserId,
+                request: request,
                 onVote: {
                     toggleVote(for: request)
                 },
                 onDeleteRequest: {
                     deleteRequest(request)
                     selectedRequest = nil
+                },
+                onRefresh: {
+                    loadRequests()
                 }
             )
         }
     }
     
-    private func toggleVote(for request: FeatureRequest) {
-        if let index = requests.firstIndex(where: { $0.id == request.id }) {
-            if requests[index].votedUserIds.contains(currentUserId) {
-                requests[index].votedUserIds.removeAll { $0 == currentUserId }
-                requests[index].votes -= 1
-            } else {
-                requests[index].votedUserIds.append(currentUserId)
-                requests[index].votes += 1
+    // MARK: - API連携
+    
+    private func loadRequests() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let apiRequests = try await NetworkManager.shared.getFeatureRequests()
+                await MainActor.run {
+                    requests = apiRequests.map { FeatureRequestLocal(from: $0) }
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "データの読み込みに失敗しました"
+                    isLoading = false
+                }
             }
-            requests.sort { $0.votes > $1.votes }
         }
     }
     
-    private func deleteRequest(_ request: FeatureRequest) {
-        requests.removeAll { $0.id == request.id }
+    private func refreshRequests() async {
+        do {
+            let apiRequests = try await NetworkManager.shared.getFeatureRequests()
+            await MainActor.run {
+                requests = apiRequests.map { FeatureRequestLocal(from: $0) }
+            }
+        } catch {
+            print("Refresh error: \(error)")
+        }
     }
     
-    private func binding(for request: FeatureRequest) -> Binding<FeatureRequest> {
-        guard let index = requests.firstIndex(where: { $0.id == request.id }) else {
-            return .constant(request)
+    private func toggleVote(for request: FeatureRequestLocal) {
+        Task {
+            do {
+                let response = try await NetworkManager.shared.toggleFeatureRequestVote(requestId: request.id)
+                await MainActor.run {
+                    if let index = requests.firstIndex(where: { $0.id == request.id }) {
+                        requests[index].hasVoted = response.voted
+                        requests[index].votes += response.voted ? 1 : -1
+                        requests.sort { $0.votes > $1.votes }
+                    }
+                }
+            } catch {
+                print("Vote error: \(error)")
+            }
         }
-        return $requests[index]
+    }
+    
+    private func deleteRequest(_ request: FeatureRequestLocal) {
+        Task {
+            do {
+                try await NetworkManager.shared.deleteFeatureRequest(id: request.id)
+                await MainActor.run {
+                    requests.removeAll { $0.id == request.id }
+                }
+            } catch {
+                print("Delete error: \(error)")
+            }
+        }
+    }
+    
+    private func createRequest(title: String, description: String) {
+        Task {
+            do {
+                let newRequest = try await NetworkManager.shared.createFeatureRequest(
+                    title: title,
+                    description: description
+                )
+                await MainActor.run {
+                    requests.insert(FeatureRequestLocal(from: newRequest), at: 0)
+                    requests.sort { $0.votes > $1.votes }
+                }
+            } catch {
+                print("Create error: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - ローカルデータモデル
+
+struct FeatureRequestLocal: Identifiable {
+    let id: String
+    let authorId: String
+    let authorName: String
+    var title: String
+    var description: String
+    var votes: Int
+    let status: String
+    var hasVoted: Bool
+    let isOwner: Bool
+    var comments: [FeatureCommentLocal]
+    let createdAt: Date
+    
+    init(from api: FeatureRequestAPI) {
+        self.id = api.id
+        self.authorId = api.authorId
+        self.authorName = api.authorName
+        self.title = api.title
+        self.description = api.description
+        self.votes = api.votes
+        self.status = api.status
+        self.hasVoted = api.hasVoted
+        self.isOwner = api.isOwner
+        self.comments = api.comments.map { FeatureCommentLocal(from: $0) }
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        self.createdAt = formatter.date(from: api.createdAt) ?? Date()
+    }
+}
+
+struct FeatureCommentLocal: Identifiable {
+    let id: String
+    let userId: String
+    let displayName: String
+    let content: String
+    let createdAt: Date
+    let isOwner: Bool
+    
+    init(from api: FeatureCommentAPI) {
+        self.id = api.id
+        self.userId = api.userId
+        self.displayName = api.displayName
+        self.content = api.content
+        self.isOwner = api.isOwner
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        self.createdAt = formatter.date(from: api.createdAt) ?? Date()
     }
 }
 
 // MARK: - リクエスト行
 struct FeatureRequestRow: View {
-    let request: FeatureRequest
-    let hasVoted: Bool
-    let isOwner: Bool
+    let request: FeatureRequestLocal
     let onVote: () -> Void
     let onDelete: () -> Void
     
@@ -141,10 +286,10 @@ struct FeatureRequestRow: View {
                 VStack(spacing: 4) {
                     Image(systemName: "arrowtriangle.up.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(hasVoted ? .orange : .gray)
+                        .foregroundColor(request.hasVoted ? .orange : .gray)
                     Text("\(request.votes)")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(hasVoted ? .orange : .primary)
+                        .foregroundColor(request.hasVoted ? .orange : .primary)
                 }
                 .frame(width: 44)
                 .padding(.vertical, 8)
@@ -163,10 +308,14 @@ struct FeatureRequestRow: View {
                     .foregroundColor(.gray)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                
+                Text(request.authorName)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            if isOwner {
+            if request.isOwner {
                 Button {
                     onDelete()
                 } label: {
@@ -191,24 +340,18 @@ struct FeatureRequestRow: View {
 
 // MARK: - リクエスト詳細画面
 struct FeatureRequestDetailView: View {
-    @Binding var request: FeatureRequest
-    let currentUserId: String
+    let request: FeatureRequestLocal
     let onVote: () -> Void
     let onDeleteRequest: () -> Void
+    let onRefresh: () -> Void
     
+    @State private var comments: [FeatureCommentLocal] = []
     @State private var newComment: String = ""
-    @State private var commentToDelete: FeatureComment? = nil
+    @State private var commentToDelete: FeatureCommentLocal? = nil
     @State private var showDeleteCommentAlert: Bool = false
     @State private var showDeleteRequestAlert: Bool = false
+    @State private var isLoadingComments: Bool = true
     @Environment(\.dismiss) private var dismiss
-    
-    var hasVoted: Bool {
-        request.votedUserIds.contains(currentUserId)
-    }
-    
-    var isOwner: Bool {
-        request.authorId == currentUserId
-    }
     
     var body: some View {
         NavigationStack {
@@ -222,7 +365,7 @@ struct FeatureRequestDetailView: View {
                             
                             Spacer()
                             
-                            if isOwner {
+                            if request.isOwner {
                                 Button {
                                     showDeleteRequestAlert = true
                                 } label: {
@@ -240,10 +383,10 @@ struct FeatureRequestDetailView: View {
                                 VStack(spacing: 4) {
                                     Image(systemName: "arrowtriangle.up.fill")
                                         .font(.system(size: 14))
-                                        .foregroundColor(hasVoted ? .orange : .gray)
+                                        .foregroundColor(request.hasVoted ? .orange : .gray)
                                     Text("\(request.votes)")
                                         .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(hasVoted ? .orange : .primary)
+                                        .foregroundColor(request.hasVoted ? .orange : .primary)
                                 }
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -253,6 +396,10 @@ struct FeatureRequestDetailView: View {
                                 .foregroundColor(.primary)
                                 .lineSpacing(4)
                         }
+                        
+                        Text("提案者: \(request.authorName)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -296,21 +443,26 @@ struct FeatureRequestDetailView: View {
                     }
                     .padding(.horizontal, 16)
                     
-                    VStack(spacing: 12) {
-                        ForEach(request.comments) { comment in
-                            CommentRow(
-                                comment: comment,
-                                isOwner: comment.userId == currentUserId,
-                                onDelete: {
-                                    commentToDelete = comment
-                                    showDeleteCommentAlert = true
-                                }
-                            )
+                    if isLoadingComments {
+                        ProgressView()
+                            .padding(.top, 20)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(comments) { comment in
+                                CommentRow(
+                                    comment: comment,
+                                    onDelete: {
+                                        commentToDelete = comment
+                                        showDeleteCommentAlert = true
+                                    }
+                                )
+                            }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                        .padding(.bottom, 32)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .padding(.bottom, 32)
                 }
             }
             .background(Color(UIColor.systemGroupedBackground))
@@ -326,6 +478,9 @@ struct FeatureRequestDetailView: View {
                             .foregroundColor(.primary)
                     }
                 }
+            }
+            .onAppear {
+                loadDetail()
             }
             .alert("コメントを削除", isPresented: $showDeleteCommentAlert) {
                 Button("キャンセル", role: .cancel) {}
@@ -348,37 +503,74 @@ struct FeatureRequestDetailView: View {
         }
     }
     
-    private func submitComment() {
-        let comment = FeatureComment(
-            userId: currentUserId,
-            displayName: "あなた",
-            content: newComment,
-            date: Date()
-        )
-        request.comments.insert(comment, at: 0)
-        newComment = ""
+    private func loadDetail() {
+        Task {
+            do {
+                let detail = try await NetworkManager.shared.getFeatureRequest(id: request.id)
+                await MainActor.run {
+                    comments = detail.comments.map { FeatureCommentLocal(from: $0) }
+                    isLoadingComments = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoadingComments = false
+                }
+            }
+        }
     }
     
-    private func deleteComment(_ comment: FeatureComment) {
-        request.comments.removeAll { $0.id == comment.id }
+    private func submitComment() {
+        let content = newComment
+        newComment = ""
+        
+        Task {
+            do {
+                let newCommentAPI = try await NetworkManager.shared.addFeatureRequestComment(
+                    requestId: request.id,
+                    content: content
+                )
+                await MainActor.run {
+                    comments.insert(FeatureCommentLocal(from: newCommentAPI), at: 0)
+                }
+            } catch {
+                await MainActor.run {
+                    newComment = content  // 失敗したら戻す
+                }
+            }
+        }
+    }
+    
+    private func deleteComment(_ comment: FeatureCommentLocal) {
+        Task {
+            do {
+                try await NetworkManager.shared.deleteFeatureRequestComment(
+                    requestId: request.id,
+                    commentId: comment.id
+                )
+                await MainActor.run {
+                    comments.removeAll { $0.id == comment.id }
+                }
+            } catch {
+                print("Delete comment error: \(error)")
+            }
+        }
     }
 }
 
 // MARK: - コメント行
 struct CommentRow: View {
-    let comment: FeatureComment
-    let isOwner: Bool
+    let comment: FeatureCommentLocal
     let onDelete: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(isOwner ? "あなた" : comment.displayName)
-                    .font(.system(size: 13, weight: isOwner ? .semibold : .regular))
-                    .foregroundColor(isOwner ? .orange : .gray)
+                Text(comment.isOwner ? "あなた" : comment.displayName)
+                    .font(.system(size: 13, weight: comment.isOwner ? .semibold : .regular))
+                    .foregroundColor(comment.isOwner ? .orange : .gray)
                 Spacer()
                 
-                if isOwner {
+                if comment.isOwner {
                     Button {
                         onDelete()
                     } label: {
@@ -388,7 +580,7 @@ struct CommentRow: View {
                     }
                 }
                 
-                Text(formatDate(comment.date))
+                Text(formatDate(comment.createdAt))
                     .font(.system(size: 13))
                     .foregroundColor(.gray)
             }
@@ -413,12 +605,12 @@ struct CommentRow: View {
 
 // MARK: - 新規リクエストシート
 struct NewFeatureRequestSheet: View {
-    @Binding var requests: [FeatureRequest]
-    let currentUserId: String
+    let onSubmit: (String, String) -> Void
     @Environment(\.dismiss) private var dismiss
     
     @State private var title: String = ""
     @State private var description: String = ""
+    @State private var isSubmitting: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -442,56 +634,15 @@ struct NewFeatureRequestSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("送信") {
-                        let newRequest = FeatureRequest(
-                            authorId: currentUserId,
-                            title: title,
-                            description: description,
-                            votes: 1,
-                            votedUserIds: [currentUserId],
-                            comments: []
-                        )
-                        requests.insert(newRequest, at: 0)
-                        requests.sort { $0.votes > $1.votes }
+                        isSubmitting = true
+                        onSubmit(title, description)
                         dismiss()
                     }
-                    .disabled(title.isEmpty)
+                    .disabled(title.isEmpty || isSubmitting)
                 }
             }
         }
     }
-}
-
-// MARK: - データモデル
-struct FeatureRequest: Identifiable {
-    let id = UUID()
-    var authorId: String
-    var title: String
-    var description: String
-    var votes: Int
-    var votedUserIds: [String]
-    var comments: [FeatureComment]
-}
-
-struct FeatureComment: Identifiable {
-    let id = UUID()
-    let userId: String
-    let displayName: String
-    let content: String
-    let date: Date
-}
-
-// MARK: - サンプルデータ（1つだけ）
-extension FeatureRequest {
-    static let sampleData: [FeatureRequest] = [
-        FeatureRequest(
-            authorId: "user1",
-            title: "カロちゃんがもっと動いて欲しい",
-            description: "カロちゃんがもっとアニメーションで動いたり、いろんな表情を見せてくれると嬉しいです！応援してくれたり、喜んでくれたりすると、もっとやる気が出そう✨",
-            votes: 0,
-            votedUserIds: ["user1", "user2", "user3"],
-            comments: []
-        )
-    ]
 }
 
 #Preview {
