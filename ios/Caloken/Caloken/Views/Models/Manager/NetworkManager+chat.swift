@@ -64,7 +64,7 @@ extension NetworkManager {
         return responseText
     }
     
-    /// ホーム画面アドバイスAPI（時間帯・食事詳細対応版）
+    /// ホーム画面アドバイスAPI（目標対応版）
     func fetchHomeAdvice(
         todayCalories: Int,
         goalCalories: Int,
@@ -76,7 +76,11 @@ extension NetworkManager {
         breakfastCount: Int = 0,
         lunchCount: Int = 0,
         dinnerCount: Int = 0,
-        snackCount: Int = 0
+        snackCount: Int = 0,
+        // 新規追加: ユーザー目標
+        userGoal: String = "",
+        currentWeight: Double? = nil,
+        targetWeight: Double? = nil
     ) async throws -> String {
         
         let endpoint = "\(baseURL)/v1/advice"
@@ -104,6 +108,7 @@ extension NetworkManager {
         debugPrint("  - Time: \(timeContext) (\(hour)時)")
         debugPrint("  - Meals: 朝\(breakfastCount) 昼\(lunchCount) 夕\(dinnerCount) 間食\(snackCount)")
         debugPrint("  - Total: \(todayCalories)/\(goalCalories) kcal")
+        debugPrint("  - Goal: \(userGoal)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -113,7 +118,7 @@ extension NetworkManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "today_calories": todayCalories,
             "goal_calories": goalCalories,
             "today_protein": todayProtein,
@@ -127,8 +132,17 @@ extension NetworkManager {
             "snack_count": snackCount,
             "current_hour": hour,
             "time_of_day": timeOfDay,
-            "time_context": timeContext
+            "time_context": timeContext,
+            "user_goal": userGoal
         ]
+        
+        // オプショナルな体重情報
+        if let currentWeight = currentWeight {
+            body["current_weight"] = currentWeight
+        }
+        if let targetWeight = targetWeight {
+            body["target_weight"] = targetWeight
+        }
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         

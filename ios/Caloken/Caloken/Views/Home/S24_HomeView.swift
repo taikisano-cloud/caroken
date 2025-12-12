@@ -457,54 +457,43 @@ struct CalorieWithAdviceCard: View {
     }
     
     // MARK: - ローカルフォールバック（時間帯対応）
+    // MARK: - ローカルフォールバック（催促なし・ポジティブ版）
     private func generateLocalAdvice() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         let nutrients = logsManager.totalNutrients(for: selectedDate)
+        let todayMeals = logsManager.logs(for: selectedDate).map { $0.name }
         
-        // 朝（〜10時）
+        // 食べたものがあれば、それにコメント
+        if let lastMeal = todayMeals.last {
+            let mealName = String(lastMeal.prefix(10))
+            return "\(mealName)、美味しそうだにゃ🐱"
+        }
+        
+        // カロリー進捗に応じたメッセージ
+        let progressPercent = target > 0 ? (current * 100 / target) : 0
+        
+        if current > target {
+            return "少し歩いてみるといいかもにゃ🚶"
+        } else if progressPercent >= 80 {
+            return "今日もいい感じだにゃ✨"
+        } else if progressPercent >= 50 {
+            return "順調に進んでるにゃ💪"
+        }
+        
+        // たんぱく質チェック
+        if nutrients.protein >= 50 {
+            return "たんぱく質いい感じだにゃ💪"
+        }
+        
+        // 時間帯に応じたメッセージ（催促なし）
         if hour < 10 {
-            if breakfastCount == 0 {
-                return "おはようにゃ🌅 朝ごはんまだみたいだにゃ！軽くでもいいから食べてほしいにゃ🍳"
-            } else {
-                return "朝ごはん食べたんだにゃ！いいスタートだにゃ🐱✨"
-            }
-        }
-        // 昼（10〜14時）
-        else if hour < 14 {
-            if lunchCount == 0 && breakfastCount == 0 {
-                return "お昼だにゃ🌞 まだ何も食べてないみたい...お腹空いてない？🐱"
-            } else if lunchCount == 0 {
-                return "お昼の時間だにゃ🍱 ランチはどうするにゃ？"
-            } else {
-                return "ランチ完了だにゃ！午後もがんばろうにゃ💪"
-            }
-        }
-        // 夕方（14〜18時）
-        else if hour < 18 {
-            if current == 0 {
-                return "夕方になったにゃ...まだ何も食べてないみたい😿 大丈夫にゃ？"
-            } else if nutrients.protein < 50 {
-                return "たんぱく質がちょっと少ないかも🐱 夕食でお肉かお魚を食べるといいにゃ💪"
-            } else {
-                let remaining = target - current
-                if remaining > 500 {
-                    return "あと\(remaining)kcalくらい食べられるにゃ🍽️ 夕食が楽しみだにゃ！"
-                } else {
-                    return "いい感じに進んでるにゃ！夕食は軽めがおすすめだにゃ🐱"
-                }
-            }
-        }
-        // 夜（18時〜）
-        else {
-            if dinnerCount == 0 && current > 0 {
-                return "夜だにゃ🌙 夕食はまだ？それとも今日は軽めにするにゃ？"
-            } else if current > target {
-                return "今日はちょっとオーバーしちゃったにゃ😅 明日は少し控えめにしようにゃ！"
-            } else if dinnerCount > 0 {
-                return "今日もお疲れ様だにゃ🌙 いい感じに食べられたにゃ✨"
-            } else {
-                return "今日も一日お疲れ様にゃ🐱 ゆっくり休んでにゃ💤"
-            }
+            return "今日も一緒にがんばろうにゃ🌅"
+        } else if hour < 14 {
+            return "午後もファイトだにゃ💪"
+        } else if hour < 18 {
+            return "お水飲んでるかにゃ？💧"
+        } else {
+            return "今日もお疲れ様だにゃ🌙"
         }
     }
 }

@@ -23,7 +23,6 @@ def get_current_time_info() -> dict:
     """現在の時間情報を取得（日本時間）"""
     import pytz
     
-    # 日本時間を取得
     jst = pytz.timezone('Asia/Tokyo')
     now = datetime.now(jst)
     hour = now.hour
@@ -31,7 +30,7 @@ def get_current_time_info() -> dict:
     if hour < 10:
         time_of_day = "morning"
         time_context = "朝"
-    elif hour < 14:
+    elif hour < 15:
         time_of_day = "noon"
         time_context = "昼"
     elif hour < 18:
@@ -185,7 +184,6 @@ class GeminiService:
     ) -> str:
         """カロちゃんとのチャット（時間帯対応）"""
         
-        # 現在時刻を取得
         time_info = get_current_time_info()
         
         context = f"\n【現在時刻】{time_info['formatted']}（{time_info['time_context']}）\n"
@@ -275,9 +273,13 @@ class GeminiService:
         snack_count: int = 0,
         current_hour: int = None,
         time_of_day: str = None,
-        time_context: str = None
+        time_context: str = None,
+        # 新規追加: ユーザー目標
+        user_goal: str = "",  # "減量" / "増量" / "維持" / "diet" / "bulk" / "maintain"
+        current_weight: float = None,
+        target_weight: float = None
     ) -> str:
-        """ホーム画面用のアドバイスを生成（多様なコンテキスト対応）"""
+        """ホーム画面用のアドバイスを生成（目標対応版）"""
         
         # 時間帯を取得
         if current_hour is None:
@@ -289,31 +291,81 @@ class GeminiService:
         remaining = goal_calories - today_calories
         progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
         
-        # プロンプトを改善：食事催促ではなく、状況に応じた多様なアドバイス
+        # 目標を日本語に統一
+        goal_text = ""
+        goal_direction = ""
+        if user_goal:
+            goal_lower = user_goal.lower()
+            if goal_lower in ["減量", "diet", "lose", "ダイエット"]:
+                goal_text = "減量中"
+                goal_direction = "diet"
+            elif goal_lower in ["増量", "bulk", "gain", "バルク"]:
+                goal_text = "増量中"
+                goal_direction = "bulk"
+            elif goal_lower in ["維持", "maintain", "keep"]:
+                goal_text = "体重維持中"
+                goal_direction = "maintain"
+        
+        # 体重差の計算
+        weight_diff_text = ""
+        if current_weight and target_weight:
+            diff = current_weight - target_weight
+            if diff > 0:
+                weight_diff_text = f"目標まであと{diff:.1f}kg減"
+            elif diff < 0:
+                weight_diff_text = f"目標まであと{abs(diff):.1f}kg増"
+            else:
+                weight_diff_text = "目標体重達成中"
+        
+        # 目標別のアドバイス方向性
+        goal_advice_hints = ""
+        if goal_direction == "diet":
+            goal_advice_hints = """
+【減量中のユーザーへのアドバイス方向性】
+- カロリー控えめを褒める「我慢えらいにゃ！」「いい調子だにゃ✨」
+- 空腹時の励まし「あと少しで目標達成にゃ💪」
+- オーバー時は優しく「明日また頑張ろうにゃ😊」
+- たんぱく質の重要性「筋肉落とさないようにね🐱」
+- 軽い運動の提案「少し歩くと気分転換になるにゃ🚶」"""
+        elif goal_direction == "bulk":
+            goal_advice_hints = """
+【増量中のユーザーへのアドバイス方向性】
+- しっかり食べることを応援「もりもり食べるにゃ💪」
+- カロリー不足時「もう少し食べても大丈夫だにゃ🍚」
+- たんぱく質の重要性「筋肉のためにたんぱく質大事にゃ🥩」
+- 達成時「いい感じに食べられてるにゃ✨」"""
+        else:
+            goal_advice_hints = """
+【体重維持中のユーザーへのアドバイス方向性】
+- バランスを褒める「いいバランスだにゃ✨」
+- 安定していることを肯定「キープできてるにゃ🐱」"""
+        
+        # プロンプト
         prompt = f"""カロちゃん（猫AI）として、ホーム画面に表示する1文アドバイスを生成。
 
 【現在】{time_context}（{current_hour}時）
+
+【ユーザーの目標】{goal_text if goal_text else "未設定"}
+{f"- {weight_diff_text}" if weight_diff_text else ""}
 
 【今日の記録】
 - カロリー: {today_calories}/{goal_calories}kcal（{progress_percent}%達成、残り{remaining}kcal）
 - たんぱく質: {today_protein}g
 - 食べたもの: {today_meals if today_meals else "まだ記録なし"}
 - 記録回数: 朝{breakfast_count} 昼{lunch_count} 夕{dinner_count} 間食{snack_count}
+{goal_advice_hints}
 
-【アドバイスの方向性】以下から状況に合うものを1つ選んで:
-1. 食べたものへのコメント（記録がある場合）「〇〇食べたんだにゃ！」「〇〇美味しそうだにゃ」
-2. 栄養バランスのヒント「たんぱく質いい感じだにゃ」
-3. カロリー進捗への励まし「順調だにゃ！」「ちょっと控えめにするにゃ」
-4. 水分補給のリマインド「お水も忘れずにゃ💧」
-5. 軽い運動の提案（カロリーオーバー時）「少し歩くといいかもにゃ」
-6. 時間帯に合った挨拶（朝なら「おはよう」夜なら「お疲れ様」）
-7. ポジティブな応援メッセージ
+【アドバイスの方向性】状況と目標に合うものを1つ選んで:
+1. 目標に寄り添った励まし（最優先）
+2. 栄養バランスのヒント
+3. カロリー進捗への励まし
 
 【重要ルール】
 - 「〇〇食べた？」「〇〇まだ？」「記録して」等の催促はNG
 - 語尾「にゃ」、絵文字1-2個
 - 1文で短く（30文字以内推奨）
 - 明るくポジティブに
+- ユーザーの目標に寄り添う
 
 1文のみ出力:"""
         
@@ -326,9 +378,9 @@ class GeminiService:
             return result
         except Exception as e:
             logger.error(f"Advice generation error: {e}")
-            # フォールバック（状況に応じた定型文）
+            # フォールバック（目標対応版）
             return GeminiService._get_fallback_advice(
-                time_of_day, today_meals, progress_percent, remaining < 0
+                time_of_day, today_meals, progress_percent, remaining < 0, goal_direction
             )
     
     @staticmethod
@@ -336,19 +388,39 @@ class GeminiService:
         time_of_day: str,
         today_meals: str,
         progress_percent: int,
-        is_over_budget: bool
+        is_over_budget: bool,
+        goal_direction: str = ""
     ) -> str:
-        """API失敗時のフォールバックアドバイス"""
+        """API失敗時のフォールバックアドバイス（目標対応版）"""
         
         # 食事記録がある場合はそれに言及
         if today_meals:
-            meals_list = today_meals.split(',') if ',' in today_meals else [today_meals]
-            first_meal = meals_list[0].strip()[:10]  # 最初の食事、10文字まで
+            meals_list = today_meals.split('、') if '、' in today_meals else [today_meals]
+            first_meal = meals_list[0].strip()[:10]
             return f"{first_meal}、美味しそうだにゃ🐱"
         
-        # カロリー進捗に応じたメッセージ
+        # 目標別メッセージ
+        if goal_direction == "diet":
+            if is_over_budget:
+                return "明日また頑張ろうにゃ😊"
+            elif progress_percent <= 70:
+                return "いい調子だにゃ！我慢えらいにゃ✨"
+            elif progress_percent <= 90:
+                return "順調だにゃ！あと少しにゃ💪"
+            else:
+                return "今日もよく頑張ったにゃ🐱"
+        
+        elif goal_direction == "bulk":
+            if progress_percent < 80:
+                return "もう少し食べても大丈夫だにゃ🍚"
+            elif progress_percent >= 100:
+                return "しっかり食べられてるにゃ💪"
+            else:
+                return "いい感じだにゃ！もりもり食べるにゃ🐱"
+        
+        # デフォルト（維持 or 未設定）
         if is_over_budget:
-            return "ちょっと歩いてみるにゃ？🚶"
+            return "少し歩いてみるといいかもにゃ🚶"
         elif progress_percent >= 80:
             return "今日もいい感じだにゃ✨"
         elif progress_percent >= 50:
