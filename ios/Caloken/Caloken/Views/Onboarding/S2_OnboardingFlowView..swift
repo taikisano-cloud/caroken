@@ -34,6 +34,11 @@ struct S2_OnboardingFlowView: View {
     @State private var calculatedFiber: Int = 20
     @State private var calculatedSodium: Int = 2300
     
+    // 計算詳細（UI表示用）
+    @State private var calculatedTDEE: Int = 2000
+    @State private var calculatedDailyAdjustment: Int = 0
+    @State private var calculatedWeeklyChange: Double = 0
+    
     // 遷移
     @State private var navigateToLogin: Bool = false
     @State private var isGoingForward: Bool = true
@@ -53,7 +58,7 @@ struct S2_OnboardingFlowView: View {
         return ageComponents.year ?? 25
     }
     
-    // MARK: - 栄養計算
+    // MARK: - 栄養計算（目標期間考慮版）
     private func calculateNutritionPlan() {
         // 1. 基礎代謝量 (BMR) - Mifflin-St Jeor式
         let bmr: Double
@@ -83,66 +88,119 @@ struct S2_OnboardingFlowView: View {
         
         // 3. TDEE (1日の総消費カロリー)
         let tdee = bmr * activityMultiplier
+        calculatedTDEE = Int(tdee)
         
-        // 4. 目標に応じたカロリー調整
+        // 4. 目標達成に必要なカロリー調整を計算
+        let weightDifference = Double(currentWeight - targetWeight)  // 正: 減量, 負: 増量
+        let daysUntilTarget = max(7, Calendar.current.dateComponents([.day], from: Date(), to: targetDate).day ?? 90)
+        
+        // 1kgの体重変化 = 約7,200kcal
+        let totalCalorieAdjustment = weightDifference * 7200
+        var dailyCalorieAdjustment = totalCalorieAdjustment / Double(daysUntilTarget)
+        
+        // 5. 現実的な範囲に制限
         let targetCalories: Double
         let proteinRatio: Double
         let fatRatio: Double
         let carbRatio: Double
         
-        switch selectedGoal {
-        case .lose:
-            // 減量: -20%（最低1200kcal）
-            targetCalories = max(1200, tdee * 0.80)
-            proteinRatio = 0.30  // 高たんぱく
+        if weightDifference > 0 {
+            // 減量の場合
+            // 最大: 1000kcal/日の赤字（週約1kg減）- 健康的な上限
+            // 最小: 250kcal/日の赤字（週約0.25kg減）- 効果を感じられる下限
+            dailyCalorieAdjustment = min(dailyCalorieAdjustment, 1000)
+            dailyCalorieAdjustment = max(dailyCalorieAdjustment, 250)
+            
+            targetCalories = tdee - dailyCalorieAdjustment
+            proteinRatio = 0.30  // 減量時は高たんぱく（筋肉維持）
             fatRatio = 0.25
             carbRatio = 0.45
-        case .maintain:
-            // 維持
-            targetCalories = tdee
-            proteinRatio = 0.25
-            fatRatio = 0.25
-            carbRatio = 0.50
-        case .gain:
-            // 増量: +15%
-            targetCalories = tdee * 1.15
+            
+        } else if weightDifference < 0 {
+            // 増量の場合
+            // 最大: 500kcal/日の黒字（週約0.5kg増）- クリーンバルク
+            // 最小: 200kcal/日の黒字（週約0.2kg増）- ゆるやか増量
+            dailyCalorieAdjustment = max(dailyCalorieAdjustment, -500)
+            dailyCalorieAdjustment = min(dailyCalorieAdjustment, -200)
+            
+            targetCalories = tdee - dailyCalorieAdjustment  // 負の調整なので実質プラス
             proteinRatio = 0.25
             fatRatio = 0.20
             carbRatio = 0.55
-        case .none:
+            
+        } else {
+            // 維持の場合
+            dailyCalorieAdjustment = 0
             targetCalories = tdee
             proteinRatio = 0.25
             fatRatio = 0.25
             carbRatio = 0.50
         }
         
-        // 5. PFCを計算
+        // 6. 最低/最高カロリーを確保
+        let minimumCalories: Double
+        if selectedGender == .male {
+            minimumCalories = 1500  // 男性の最低ライン
+        } else if selectedGender == .female {
+            minimumCalories = 1200  // 女性の最低ライン
+        } else {
+            minimumCalories = 1350  // 中間
+        }
+        
+        let maximumCalories = tdee * 1.4  // TDEEの140%を上限
+        
+        let finalCalories = min(max(targetCalories, minimumCalories), maximumCalories)
+        
+        // 7. 計算結果を保存
+        calculatedCalories = Int(finalCalories)
+        calculatedDailyAdjustment = Int(dailyCalorieAdjustment)
+        calculatedWeeklyChange = (dailyCalorieAdjustment * 7) / 7200  // 週あたりの体重変化(kg)
+        
+        // 8. PFCを計算
         // たんぱく質: 1g = 4kcal
         // 脂質: 1g = 9kcal
         // 炭水化物: 1g = 4kcal
-        calculatedCalories = Int(targetCalories)
-        calculatedProtein = Int((targetCalories * proteinRatio) / 4)
-        calculatedFat = Int((targetCalories * fatRatio) / 9)
-        calculatedCarbs = Int((targetCalories * carbRatio) / 4)
+        calculatedProtein = Int((finalCalories * proteinRatio) / 4)
+        calculatedFat = Int((finalCalories * fatRatio) / 9)
+        calculatedCarbs = Int((finalCalories * carbRatio) / 4)
         
-        // 6. その他の栄養素
+        // 9. その他の栄養素
         // 糖分: 総カロリーの5-10%（1g = 4kcal）
-        calculatedSugar = Int((targetCalories * 0.05) / 4)
+        // 減量時は控えめ、増量時はやや多め
+        let sugarRatio: Double
+        switch selectedGoal {
+        case .lose:
+            sugarRatio = 0.05
+        case .gain:
+            sugarRatio = 0.08
+        default:
+            sugarRatio = 0.06
+        }
+        calculatedSugar = Int((finalCalories * sugarRatio) / 4)
         
-        // 食物繊維: 1000kcalあたり14g
-        calculatedFiber = Int((targetCalories / 1000) * 14)
+        // 食物繊維: 1000kcalあたり14g（米国栄養士会推奨）
+        calculatedFiber = Int((finalCalories / 1000) * 14)
         
         // ナトリウム: 目標により調整
         switch selectedGoal {
         case .lose:
-            calculatedSodium = 2000  // 減量時は控えめ
+            calculatedSodium = 2000  // 減量時は控えめ（むくみ防止）
         case .maintain:
-            calculatedSodium = 2300
+            calculatedSodium = 2300  // WHO推奨上限
         case .gain:
             calculatedSodium = 2500
         case .none:
             calculatedSodium = 2300
         }
+        
+        // デバッグ出力
+        debugPrint("📊 栄養計算結果:")
+        debugPrint("  - TDEE: \(Int(tdee))kcal")
+        debugPrint("  - 体重差: \(weightDifference)kg")
+        debugPrint("  - 目標までの日数: \(daysUntilTarget)日")
+        debugPrint("  - 1日の調整: \(Int(dailyCalorieAdjustment))kcal")
+        debugPrint("  - 週の体重変化: \(String(format: "%.2f", calculatedWeeklyChange))kg")
+        debugPrint("  - 目標カロリー: \(calculatedCalories)kcal")
     }
     
     private func goToNextStep() {
@@ -215,8 +273,12 @@ struct S2_OnboardingFlowView: View {
                 case 9:
                     PlanDetailView(
                         targetDate: targetDate,
+                        currentWeight: currentWeight,
                         targetWeight: targetWeight,
                         calories: calculatedCalories,
+                        tdee: calculatedTDEE,
+                        dailyAdjustment: calculatedDailyAdjustment,
+                        weeklyChange: calculatedWeeklyChange,
                         carbs: calculatedCarbs,
                         protein: calculatedProtein,
                         fat: calculatedFat,
@@ -737,7 +799,6 @@ struct HealthKitConnectionView: View {
         VStack(spacing: 24) {
             Spacer().frame(height: 40)
             
-            // 通知が未許可の場合の警告
             if notificationStatus == .denied {
                 NotificationWarningBanner()
             }
@@ -772,7 +833,6 @@ struct HealthKitConnectionView: View {
 struct NotificationWarningBanner: View {
     var body: some View {
         Button {
-            // 設定アプリを開く
             if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
                 UIApplication.shared.open(settingsURL)
             }
@@ -905,14 +965,30 @@ struct PlanCheckItem: View {
 
 struct PlanDetailView: View {
     let targetDate: Date
+    let currentWeight: Int
     let targetWeight: Int
     let calories: Int
+    let tdee: Int
+    let dailyAdjustment: Int
+    let weeklyChange: Double
     let carbs: Int
     let protein: Int
     let fat: Int
     let fiber: Int
     let sugar: Int
     let sodium: Int
+    
+    private var weightDiff: Int {
+        currentWeight - targetWeight
+    }
+    
+    private var isLosing: Bool {
+        weightDiff > 0
+    }
+    
+    private var daysUntilTarget: Int {
+        max(1, Calendar.current.dateComponents([.day], from: Date(), to: targetDate).day ?? 90)
+    }
     
     var body: some View {
         ScrollView {
@@ -923,14 +999,69 @@ struct PlanDetailView: View {
                     Text("\(formatDateFull(targetDate))までに\n\(targetWeight) kgを達成").font(.system(size: 22, weight: .bold)).multilineTextAlignment(.center)
                 }.padding(.top, 20)
                 
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     Text("1日の目標カロリー").font(.system(size: 16)).foregroundColor(.gray)
                     HStack(alignment: .bottom, spacing: 4) {
                         Text("\(calories)").font(.system(size: 56, weight: .bold)).foregroundColor(.orange)
                         Text("kcal").font(.system(size: 20, weight: .semibold)).foregroundColor(.orange).padding(.bottom, 10)
                     }
-                    Text("このカロリーを守ることで目標を達成できます").font(.system(size: 14)).foregroundColor(.gray)
-                }.padding(24).frame(maxWidth: .infinity).background(Color.orange.opacity(0.1)).cornerRadius(16).padding(.horizontal, 16)
+                    
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("基礎消費カロリー (TDEE)")
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text("\(tdee) kcal")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        
+                        if dailyAdjustment != 0 {
+                            HStack {
+                                Text(isLosing ? "1日の目標赤字" : "1日の目標黒字")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text("\(isLosing ? "-" : "+")\(abs(dailyAdjustment)) kcal")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(isLosing ? .blue : .green)
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("週あたりの体重変化")
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text("\(isLosing ? "-" : "+")\(String(format: "%.2f", abs(weeklyChange))) kg/週")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(isLosing ? .blue : .green)
+                        }
+                        
+                        HStack {
+                            Text("目標達成まで")
+                                .font(.system(size: 13))
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text("\(daysUntilTarget)日（約\(daysUntilTarget / 7)週間）")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    
+                    Text("このカロリーを守ることで目標を達成できます")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                        .padding(.top, 4)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(16)
+                .padding(.horizontal, 16)
                 
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
