@@ -15,9 +15,18 @@ class Settings(BaseSettings):
     # Gemini AI
     gemini_api_key: str
     
-    # App
-    app_env: str = "development"
-    debug: bool = True
+    # App - 環境変数 ENVIRONMENT から取得
+    app_env: str = Field(default="development", validation_alias="ENVIRONMENT")
+    
+    @property
+    def debug(self) -> bool:
+        """本番環境ではデバッグを無効化"""
+        return self.app_env != "production"
+    
+    @property
+    def is_production(self) -> bool:
+        """本番環境かどうか"""
+        return self.app_env == "production"
     
     class Config:
         env_file = ".env"

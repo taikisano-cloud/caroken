@@ -61,7 +61,6 @@ class WeightLogsManager: ObservableObject {
         
         // 通知を送信
         NotificationCenter.default.post(name: .weightLogAdded, object: nil)
-        print("⚖️ 体重記録: \(weight)kg")
     }
     
     // 体重ログを削除
@@ -127,7 +126,6 @@ class WeightLogsManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: logsKey),
            let decoded = try? JSONDecoder().decode([WeightLogEntry].self, from: data) {
             allLogs = decoded
-            print("📂 体重ログ読み込み: \(allLogs.count)件")
         }
     }
     
