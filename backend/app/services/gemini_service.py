@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=settings.gemini_api_key)
 
 # モデル設定
-model = genai.GenerativeModel('gemini-2.5-pro')  # メイン（チャット、分析）
-model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')  # 軽量（ホームアドバイス）
+model = genai.GenerativeModel('gemini-2.5-pro')  # 思考重視（チャット(思考)、食事&運動分析）
+model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')  # 速度重視（ホームアドバイス、チャット(高速)）
 
 
 def get_current_time_info() -> dict:
