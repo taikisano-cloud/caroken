@@ -6,15 +6,17 @@ from datetime import datetime
 import base64
 import json
 import re
+import logging
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Gemini設定
 genai.configure(api_key=settings.gemini_api_key)
 
 # モデル設定
 model = genai.GenerativeModel('gemini-2.5-pro')  # メイン（チャット、分析）
-model_flash_lite = genai.GenerativeModel('gemini-2.0-flash-lite')  # 軽量（ホームアドバイス）
+model_flash_lite = genai.GenerativeModel('gemini-flash-lite-latest')  # 軽量（ホームアドバイス）
 
 
 def get_current_time_info() -> dict:
@@ -109,6 +111,7 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
+            logger.error(f"Image analysis error: {e}")
             return DetailedMealAnalysis(
                 food_items=[FoodItem(name="分析できませんでした", amount="不明", calories=0, protein=0, fat=0, carbs=0)],
                 total_calories=0, total_protein=0, total_fat=0, total_carbs=0,
@@ -164,6 +167,7 @@ class GeminiService:
                 raise ValueError("Failed to parse AI response")
                 
         except Exception as e:
+            logger.error(f"Text analysis error: {e}")
             return DetailedMealAnalysis(
                 food_items=[FoodItem(name=description[:20] if description else "不明", amount="1食分", calories=300, protein=15, fat=10, carbs=40)],
                 total_calories=300, total_protein=15, total_fat=10, total_carbs=40,
@@ -253,7 +257,7 @@ class GeminiService:
             return response.text.strip()
             
         except Exception as e:
-            print(f"Gemini API Error: {e}")
+            logger.error(f"Chat error: {e}")
             return "ごめんにゃ、ちょっと調子が悪いみたい...😿 もう一度話しかけてほしいにゃ！"
     
     @staticmethod
@@ -273,7 +277,7 @@ class GeminiService:
         time_of_day: str = None,
         time_context: str = None
     ) -> str:
-        """ホーム画面用のアドバイスを生成（短縮版・高速）"""
+        """ホーム画面用のアドバイスを生成（多様なコンテキスト対応）"""
         
         # 時間帯を取得
         if current_hour is None:
@@ -283,33 +287,82 @@ class GeminiService:
             time_context = time_info["time_context"]
         
         remaining = goal_calories - today_calories
+        progress_percent = int((today_calories / goal_calories) * 100) if goal_calories > 0 else 0
         
-        # 短縮プロンプト
-        prompt = f"""カロちゃん（猫AI）として1文アドバイス。
+        # プロンプトを改善：食事催促ではなく、状況に応じた多様なアドバイス
+        prompt = f"""カロちゃん（猫AI）として、ホーム画面に表示する1文アドバイスを生成。
 
-現在: {time_context}（{current_hour}時）
-カロリー: {today_calories}/{goal_calories}kcal（残り{remaining}kcal）
-食事: 朝{breakfast_count}回 昼{lunch_count}回 夕{dinner_count}回
+【現在】{time_context}（{current_hour}時）
 
-ルール:
+【今日の記録】
+- カロリー: {today_calories}/{goal_calories}kcal（{progress_percent}%達成、残り{remaining}kcal）
+- たんぱく質: {today_protein}g
+- 食べたもの: {today_meals if today_meals else "まだ記録なし"}
+- 記録回数: 朝{breakfast_count} 昼{lunch_count} 夕{dinner_count} 間食{snack_count}
+
+【アドバイスの方向性】以下から状況に合うものを1つ選んで:
+1. 食べたものへのコメント（記録がある場合）「〇〇食べたんだにゃ！」「〇〇美味しそうだにゃ」
+2. 栄養バランスのヒント「たんぱく質いい感じだにゃ」
+3. カロリー進捗への励まし「順調だにゃ！」「ちょっと控えめにするにゃ」
+4. 水分補給のリマインド「お水も忘れずにゃ💧」
+5. 軽い運動の提案（カロリーオーバー時）「少し歩くといいかもにゃ」
+6. 時間帯に合った挨拶（朝なら「おはよう」夜なら「お疲れ様」）
+7. ポジティブな応援メッセージ
+
+【重要ルール】
+- 「〇〇食べた？」「〇〇まだ？」「記録して」等の催促はNG
 - 語尾「にゃ」、絵文字1-2個
-- 今の時間帯に合った内容のみ（{time_context}の話だけ）
-- 1文で短く"""
+- 1文で短く（30文字以内推奨）
+- 明るくポジティブに
+
+1文のみ出力:"""
         
         try:
             response = model_flash_lite.generate_content(prompt)
-            return response.text.strip()
+            result = response.text.strip()
+            # 改行があれば最初の行だけ取る
+            if '\n' in result:
+                result = result.split('\n')[0]
+            return result
         except Exception as e:
-            print(f"Gemini API Error (advice): {e}")
-            # フォールバック
-            if time_of_day == "morning":
-                return "おはようにゃ🌅 今日も一緒にがんばろうにゃ！" if breakfast_count > 0 else "朝ごはんまだみたいだにゃ🍳"
-            elif time_of_day == "noon":
-                return "ランチタイムだにゃ🍱" if lunch_count == 0 else "午後もがんばろうにゃ💪"
-            elif time_of_day == "afternoon":
-                return f"あと{remaining}kcal食べられるにゃ🍽️" if remaining > 300 else "いい感じだにゃ🐱"
-            else:
-                return "今日もお疲れ様にゃ🌙" if today_calories <= goal_calories else "ちょっとオーバーだにゃ😅"
+            logger.error(f"Advice generation error: {e}")
+            # フォールバック（状況に応じた定型文）
+            return GeminiService._get_fallback_advice(
+                time_of_day, today_meals, progress_percent, remaining < 0
+            )
+    
+    @staticmethod
+    def _get_fallback_advice(
+        time_of_day: str,
+        today_meals: str,
+        progress_percent: int,
+        is_over_budget: bool
+    ) -> str:
+        """API失敗時のフォールバックアドバイス"""
+        
+        # 食事記録がある場合はそれに言及
+        if today_meals:
+            meals_list = today_meals.split(',') if ',' in today_meals else [today_meals]
+            first_meal = meals_list[0].strip()[:10]  # 最初の食事、10文字まで
+            return f"{first_meal}、美味しそうだにゃ🐱"
+        
+        # カロリー進捗に応じたメッセージ
+        if is_over_budget:
+            return "ちょっと歩いてみるにゃ？🚶"
+        elif progress_percent >= 80:
+            return "今日もいい感じだにゃ✨"
+        elif progress_percent >= 50:
+            return "順調に進んでるにゃ💪"
+        
+        # 時間帯に応じたメッセージ
+        if time_of_day == "morning":
+            return "今日も一緒にがんばろうにゃ🌅"
+        elif time_of_day == "noon":
+            return "午後もファイトだにゃ💪"
+        elif time_of_day == "afternoon":
+            return "お水飲んでるかにゃ？💧"
+        else:
+            return "今日もお疲れ様だにゃ🌙"
     
     @staticmethod
     async def generate_meal_comment(
@@ -331,7 +384,7 @@ class GeminiService:
             response = model_flash_lite.generate_content(prompt)
             return response.text.strip()
         except Exception as e:
-            print(f"Gemini API Error (meal comment): {e}")
+            logger.error(f"Meal comment error: {e}")
             return "美味しそうだにゃ！🐱"
 
 
