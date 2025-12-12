@@ -163,7 +163,7 @@ struct S51_PaywallView: View {
                     Task {
                         await subscriptionManager.checkSubscriptionStatus()
                         if subscriptionManager.isSubscribed {
-                            print("✅ Already subscribed, going to home")
+                            debugPrint("✅ Already subscribed, going to home")
                             completePurchase()
                         } else {
                             // 未課金なら自動で年額プラン購入を開始
@@ -184,7 +184,7 @@ struct S51_PaywallView: View {
     
     private func purchase() {
         isLoading = true
-        print("💳 Starting purchase for plan: \(selectedPlan.productId)")
+        debugPrint("💳 Starting purchase for plan: \(selectedPlan.productId)")
         
         Task {
             do {
@@ -199,11 +199,11 @@ struct S51_PaywallView: View {
             } catch SubscriptionError.productNotFound {
                 await MainActor.run {
                     isLoading = false
-                    print("⚠️ Product not found: \(selectedPlan.productId)")
+                    debugPrint("⚠️ Product not found: \(selectedPlan.productId)")
                     
                     // 開発モードではスキップ
                     if isDevelopment {
-                        print("🔧 Development mode: skipping purchase")
+                        debugPrint("🔧 Development mode: skipping purchase")
                         completePurchase()
                     } else {
                         errorMessage = "商品が見つかりませんでした"
@@ -213,11 +213,11 @@ struct S51_PaywallView: View {
             } catch {
                 await MainActor.run {
                     isLoading = false
-                    print("❌ Purchase error: \(error)")
+                    debugPrint("❌ Purchase error: \(error)")
                     
                     // 開発モードではスキップ
                     if isDevelopment {
-                        print("🔧 Development mode: skipping after error")
+                        debugPrint("🔧 Development mode: skipping after error")
                         completePurchase()
                     } else {
                         errorMessage = error.localizedDescription
@@ -230,7 +230,7 @@ struct S51_PaywallView: View {
     
     private func restorePurchases() {
         isLoading = true
-        print("🔄 Restoring purchases...")
+        debugPrint("🔄 Restoring purchases...")
         
         Task {
             do {
@@ -239,10 +239,10 @@ struct S51_PaywallView: View {
                 await MainActor.run {
                     isLoading = false
                     if restored {
-                        print("✅ Purchases restored!")
+                        debugPrint("✅ Purchases restored!")
                         completePurchase()
                     } else {
-                        print("⚠️ No purchases to restore")
+                        debugPrint("⚠️ No purchases to restore")
                         // 開発モードではスキップ
                         if isDevelopment {
                             completePurchase()
@@ -252,7 +252,7 @@ struct S51_PaywallView: View {
             } catch {
                 await MainActor.run {
                     isLoading = false
-                    print("❌ Restore error: \(error)")
+                    debugPrint("❌ Restore error: \(error)")
                 }
             }
         }
@@ -431,7 +431,7 @@ struct PaywallVideoPlayerView: View {
         // Bundle内の動画ファイルを探す
         if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
             videoURL = bundleURL
-            print("✅ Paywall: Video found in Bundle")
+            debugPrint("✅ Paywall: Video found in Bundle")
         }
         // Assets Catalogから読み込む
         else if let asset = NSDataAsset(name: "onboarding") {
@@ -442,12 +442,12 @@ struct PaywallVideoPlayerView: View {
                 }
                 try asset.data.write(to: tempURL)
                 videoURL = tempURL
-                print("✅ Paywall: Video loaded from Assets")
+                debugPrint("✅ Paywall: Video loaded from Assets")
             } catch {
-                print("❌ Paywall: Failed to write video: \(error)")
+                debugPrint("❌ Paywall: Failed to write video: \(error)")
             }
         } else {
-            print("⚠️ Paywall: Video not found, using static content")
+            debugPrint("⚠️ Paywall: Video not found, using static content")
         }
         
         if let url = videoURL {

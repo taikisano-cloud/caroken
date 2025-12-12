@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.routers import auth, users, meals, exercises, weights, ai, stats, meal_analysis, chat_router
 from app.routers.feature_requests_router import router as feature_requests_router
 from app.config import get_settings
+from app.middleware.rate_limit import RateLimitMiddleware
 import logging
 
 settings = get_settings()
@@ -21,6 +23,14 @@ app = FastAPI(
     # 本番では /docs と /redoc を無効化
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
+)
+
+# Rate Limiting ミドルウェア（本番のみ有効）
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=60,   # 1分あたり60リクエスト
+    requests_per_hour=1000,   # 1時間あたり1000リクエスト
+    enabled=settings.is_production  # 本番のみ有効
 )
 
 # CORS設定
@@ -77,9 +87,6 @@ async def health_check():
 
 
 # グローバル例外ハンドラー（本番では詳細エラーを隠す）
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     if settings.is_production:

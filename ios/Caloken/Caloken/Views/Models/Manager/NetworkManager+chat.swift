@@ -17,8 +17,8 @@ extension NetworkManager {
         
         let endpoint = "\(baseURL)/v1/chat"
         
-        print("💬 Chat Request: \(endpoint)")
-        print("  - Mode: \(mode)")
+        debugPrint("💬 Chat Request: \(endpoint)")
+        debugPrint("  - Mode: \(mode)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -47,11 +47,11 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             if let errorString = String(data: data, encoding: .utf8) {
-                print("  - Error: \(errorString)")
+                debugPrint("  - Error: \(errorString)")
             }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
@@ -100,10 +100,10 @@ extension NetworkManager {
             timeContext = "夜"
         }
         
-        print("📝 Advice Request: \(endpoint)")
-        print("  - Time: \(timeContext) (\(hour)時)")
-        print("  - Meals: 朝\(breakfastCount) 昼\(lunchCount) 夕\(dinnerCount) 間食\(snackCount)")
-        print("  - Total: \(todayCalories)/\(goalCalories) kcal")
+        debugPrint("📝 Advice Request: \(endpoint)")
+        debugPrint("  - Time: \(timeContext) (\(hour)時)")
+        debugPrint("  - Meals: 朝\(breakfastCount) 昼\(lunchCount) 夕\(dinnerCount) 間食\(snackCount)")
+        debugPrint("  - Total: \(todayCalories)/\(goalCalories) kcal")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -138,11 +138,11 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             if let errorString = String(data: data, encoding: .utf8) {
-                print("  - Error: \(errorString)")
+                debugPrint("  - Error: \(errorString)")
             }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
@@ -169,7 +169,7 @@ extension NetworkManager {
         
         let endpoint = "\(baseURL)/v1/meal-comment"
         
-        print("🍽️ Meal Comment Request: \(endpoint)")
+        debugPrint("🍽️ Meal Comment Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -198,11 +198,11 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             if let errorString = String(data: data, encoding: .utf8) {
-                print("  - Error: \(errorString)")
+                debugPrint("  - Error: \(errorString)")
             }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
@@ -246,8 +246,8 @@ extension NetworkManager {
     func analyzeMeal(imageBase64: String) async throws -> MealAnalysisData {
         let endpoint = "\(baseURL)/v1/analyze-meal"
         
-        print("🍽️ Meal Analysis (Image):")
-        print("  - URL: \(endpoint)")
+        debugPrint("🍽️ Meal Analysis (Image):")
+        debugPrint("  - URL: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -269,17 +269,17 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             if let errorString = String(data: data, encoding: .utf8) {
-                print("  - Error: \(errorString)")
+                debugPrint("  - Error: \(errorString)")
             }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
         if let jsonString = String(data: data, encoding: .utf8) {
-            print("  - Response: \(jsonString.prefix(300))...")
+            debugPrint("  - Response: \(jsonString.prefix(300))...")
         }
     
         let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)
@@ -290,9 +290,9 @@ extension NetworkManager {
     func analyzeMeal(description: String) async throws -> MealAnalysisData {
         let endpoint = "\(baseURL)/v1/analyze-meal"
         
-        print("🍽️ Meal Analysis (Text):")
-        print("  - URL: \(endpoint)")
-        print("  - Description: \(description)")
+        debugPrint("🍽️ Meal Analysis (Text):")
+        debugPrint("  - URL: \(endpoint)")
+        debugPrint("  - Description: \(description)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -314,17 +314,17 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             if let errorString = String(data: data, encoding: .utf8) {
-                print("  - Error: \(errorString)")
+                debugPrint("  - Error: \(errorString)")
             }
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
         }
         
         if let jsonString = String(data: data, encoding: .utf8) {
-            print("  - Response: \(jsonString.prefix(300))...")
+            debugPrint("  - Response: \(jsonString.prefix(300))...")
         }
         
         let result = try JSONDecoder().decode(MealAnalysisData.self, from: data)

@@ -144,18 +144,18 @@ struct S27_5_FeatureRequestView: View {
         errorMessage = nil
         
         let token = UserDefaults.standard.string(forKey: "supabase_access_token")
-        print("🔑 Token check: \(token != nil ? "exists (\(token!.count) chars)" : "NOT FOUND")")
+        debugPrint("🔑 Token check: \(token != nil ? "exists (\(token!.count) chars)" : "NOT FOUND")")
         
         Task {
             do {
                 let apiRequests = try await NetworkManager.shared.getFeatureRequests()
-                print("✅ Got \(apiRequests.count) requests")  // ← 追加
+                debugPrint("✅ Got \(apiRequests.count) requests")  // ← 追加
                 await MainActor.run {
                     requests = apiRequests.map { FeatureRequestLocal(from: $0) }
                     isLoading = false
                 }
             } catch {
-                print("❌ Error: \(error)")  // ← 追加：エラー詳細
+                debugPrint("❌ Error: \(error)")  // ← 追加：エラー詳細
                 await MainActor.run {
                     errorMessage = "データの読み込みに失敗しました"
                     isLoading = false
@@ -171,7 +171,7 @@ struct S27_5_FeatureRequestView: View {
                 requests = apiRequests.map { FeatureRequestLocal(from: $0) }
             }
         } catch {
-            print("Refresh error: \(error)")
+            debugPrint("Refresh error: \(error)")
         }
     }
     
@@ -187,7 +187,7 @@ struct S27_5_FeatureRequestView: View {
                     }
                 }
             } catch {
-                print("Vote error: \(error)")
+                debugPrint("Vote error: \(error)")
             }
         }
     }
@@ -200,7 +200,7 @@ struct S27_5_FeatureRequestView: View {
                     requests.removeAll { $0.id == request.id }
                 }
             } catch {
-                print("Delete error: \(error)")
+                debugPrint("Delete error: \(error)")
             }
         }
     }
@@ -217,7 +217,7 @@ struct S27_5_FeatureRequestView: View {
                     requests.sort { $0.votes > $1.votes }
                 }
             } catch {
-                print("Create error: \(error)")
+                debugPrint("Create error: \(error)")
             }
         }
     }
@@ -556,7 +556,7 @@ struct FeatureRequestDetailView: View {
                     comments.removeAll { $0.id == comment.id }
                 }
             } catch {
-                print("Delete comment error: \(error)")
+                debugPrint("Delete comment error: \(error)")
             }
         }
     }

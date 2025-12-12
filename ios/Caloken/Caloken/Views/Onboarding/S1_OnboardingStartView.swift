@@ -127,7 +127,7 @@ struct WelcomeVideoPlayerView: View {
         // Bundle内のファイルを探す
         if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
             videoURL = bundleURL
-            print("✅ Welcome: Video found in Bundle")
+            debugPrint("✅ Welcome: Video found in Bundle")
         } else if let asset = NSDataAsset(name: "onboarding") {
             // Assets Catalogから取得
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("WelcomeOnboarding.mp4")
@@ -137,9 +137,9 @@ struct WelcomeVideoPlayerView: View {
                 }
                 try asset.data.write(to: tempURL)
                 videoURL = tempURL
-                print("✅ Welcome: Video loaded from Assets")
+                debugPrint("✅ Welcome: Video loaded from Assets")
             } catch {
-                print("❌ Welcome: Failed to write video: \(error)")
+                debugPrint("❌ Welcome: Failed to write video: \(error)")
             }
         }
         

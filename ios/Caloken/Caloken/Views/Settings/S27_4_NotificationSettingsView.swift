@@ -193,7 +193,7 @@ struct S27_4_NotificationSettingsView: View {
                     }
                 }
             } catch {
-                print("Notification permission error: \(error)")
+                debugPrint("Notification permission error: \(error)")
             }
         }
     }
@@ -212,9 +212,9 @@ struct S27_4_NotificationSettingsView: View {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Test notification error: \(error)")
+                debugPrint("Test notification error: \(error)")
             } else {
-                print("Test notification scheduled!")
+                debugPrint("Test notification scheduled!")
             }
         }
     }

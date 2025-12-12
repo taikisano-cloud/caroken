@@ -182,9 +182,9 @@ class NotificationManager: ObservableObject {
         
         do {
             try await notificationCenter.add(request)
-            print("Scheduled meal reminder \(index) at \(components.hour ?? 0):\(components.minute ?? 0)")
+            debugPrint("Scheduled meal reminder \(index) at \(components.hour ?? 0):\(components.minute ?? 0)")
         } catch {
-            print("Failed to schedule meal reminder: \(error)")
+            debugPrint("Failed to schedule meal reminder: \(error)")
         }
     }
     
@@ -234,9 +234,9 @@ class NotificationManager: ObservableObject {
         
         do {
             try await notificationCenter.add(request)
-            print("Scheduled weight reminder at \(components.hour ?? 0):\(components.minute ?? 0)")
+            debugPrint("Scheduled weight reminder at \(components.hour ?? 0):\(components.minute ?? 0)")
         } catch {
-            print("Failed to schedule weight reminder: \(error)")
+            debugPrint("Failed to schedule weight reminder: \(error)")
         }
     }
     
@@ -258,14 +258,14 @@ class NotificationManager: ObservableObject {
     /// 予定されている通知をデバッグ出力
     func debugPrintPendingNotifications() {
         notificationCenter.getPendingNotificationRequests { requests in
-            print("=== Pending Notifications ===")
+            debugPrint("=== Pending Notifications ===")
             for request in requests {
-                print("ID: \(request.identifier)")
+                debugPrint("ID: \(request.identifier)")
                 if let trigger = request.trigger as? UNCalendarNotificationTrigger {
-                    print("  Time: \(trigger.dateComponents)")
+                    debugPrint("  Time: \(trigger.dateComponents)")
                 }
             }
-            print("=============================")
+            debugPrint("=============================")
         }
     }
 }

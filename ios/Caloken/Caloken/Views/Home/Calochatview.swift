@@ -588,7 +588,7 @@ class SpeechRecognizer: ObservableObject {
             try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
             try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
-            print("Audio session setup failed: \(error)")
+            debugPrint("Audio session setup failed: \(error)")
             return
         }
         
@@ -622,7 +622,7 @@ class SpeechRecognizer: ObservableObject {
         do {
             try audioEngine.start()
         } catch {
-            print("Audio engine failed to start: \(error)")
+            debugPrint("Audio engine failed to start: \(error)")
         }
     }
     

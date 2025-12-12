@@ -46,7 +46,7 @@ struct ContentView: View {
         .onChange(of: subscriptionManager.isSubscribed) { _, newValue in
             if !newValue && hasCheckedSubscription {
                 // 課金が切れた場合
-                print("⚠️ Subscription expired")
+                debugPrint("⚠️ Subscription expired")
             }
         }
     }

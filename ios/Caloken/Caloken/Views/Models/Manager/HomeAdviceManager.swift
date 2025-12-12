@@ -60,10 +60,10 @@ class HomeAdviceManager: ObservableObject {
             lastUpdateTime = Date()
             cacheAdvice(advice)
             
-            print("✅ Advice updated: \(advice)")
+            debugPrint("✅ Advice updated: \(advice)")
             
         } catch {
-            print("❌ Failed to get advice: \(error)")
+            debugPrint("❌ Failed to get advice: \(error)")
             // エラー時はフォールバックアドバイスを使用
             currentAdvice = getFallbackAdvice(stats: todayStats)
         }

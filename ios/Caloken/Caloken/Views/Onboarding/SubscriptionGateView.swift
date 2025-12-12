@@ -44,7 +44,7 @@ struct SubscriptionGateView<Content: View>: View {
         .onChange(of: subscriptionManager.isSubscribed) { _, newValue in
             if !newValue && hasChecked {
                 // 課金が切れた場合（アプリ使用中に期限切れなど）
-                print("⚠️ Subscription expired, showing paywall")
+                debugPrint("⚠️ Subscription expired, showing paywall")
             }
         }
     }

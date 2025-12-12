@@ -261,7 +261,7 @@ class CameraManager: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate {
                 captureSession?.addOutput(photoOutput)
             }
         } catch {
-            print("カメラ設定エラー: \(error)")
+            debugPrint("カメラ設定エラー: \(error)")
         }
     }
     
@@ -296,19 +296,19 @@ class CameraManager: NSObject, ObservableObject, AVCapturePhotoCaptureDelegate {
             device.torchMode = isOn ? .on : .off
             device.unlockForConfiguration()
         } catch {
-            print("トーチ設定エラー: \(error)")
+            debugPrint("トーチ設定エラー: \(error)")
         }
     }
     
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            print("撮影エラー: \(error)")
+            debugPrint("撮影エラー: \(error)")
             return
         }
         
         guard let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
-            print("画像データ変換エラー")
+            debugPrint("画像データ変換エラー")
             return
         }
         

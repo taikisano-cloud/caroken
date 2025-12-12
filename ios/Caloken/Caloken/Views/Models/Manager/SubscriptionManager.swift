@@ -45,7 +45,7 @@ class SubscriptionManager: ObservableObject {
             if subscriptionProductIds.contains(transaction.productID) {
                 if transaction.revocationDate == nil {
                     isSubscribed = true
-                    print("✅ Subscription active: \(transaction.productID)")
+                    debugPrint("✅ Subscription active: \(transaction.productID)")
                 } else {
                     // 取り消された場合
                     await checkSubscriptionStatus()
@@ -53,14 +53,14 @@ class SubscriptionManager: ObservableObject {
             }
             await transaction.finish()
         case .unverified(_, _):
-            print("⚠️ Unverified transaction")
+            debugPrint("⚠️ Unverified transaction")
         }
     }
     
     // MARK: - サブスクリプション状態チェック
     func checkSubscriptionStatus() async {
         isChecking = true
-        print("🔍 Checking subscription status...")
+        debugPrint("🔍 Checking subscription status...")
         
         var hasActiveSubscription = false
         
@@ -73,40 +73,40 @@ class SubscriptionManager: ObservableObject {
                     if let expirationDate = transaction.expirationDate {
                         if expirationDate > Date() {
                             hasActiveSubscription = true
-                            print("✅ Active subscription found: \(transaction.productID)")
-                            print("   Expires: \(expirationDate)")
+                            debugPrint("✅ Active subscription found: \(transaction.productID)")
+                            debugPrint("   Expires: \(expirationDate)")
                         } else {
-                            print("⚠️ Subscription expired: \(transaction.productID)")
+                            debugPrint("⚠️ Subscription expired: \(transaction.productID)")
                         }
                     } else {
                         // 有効期限がない場合（永続購入など）
                         hasActiveSubscription = true
-                        print("✅ Active entitlement found: \(transaction.productID)")
+                        debugPrint("✅ Active entitlement found: \(transaction.productID)")
                     }
                 }
             case .unverified(_, _):
-                print("⚠️ Unverified entitlement")
+                debugPrint("⚠️ Unverified entitlement")
             }
         }
         
         isSubscribed = hasActiveSubscription
         isChecking = false
         
-        print("🔍 Subscription check complete: \(isSubscribed ? "SUBSCRIBED ✅" : "NOT SUBSCRIBED ❌")")
+        debugPrint("🔍 Subscription check complete: \(isSubscribed ? "SUBSCRIBED ✅" : "NOT SUBSCRIBED ❌")")
     }
     
     // MARK: - 購入処理
     func purchase(productId: String) async throws -> Bool {
-        print("💳 Starting purchase for: \(productId)")
+        debugPrint("💳 Starting purchase for: \(productId)")
         
         let products = try await Product.products(for: [productId])
         
         guard let product = products.first else {
-            print("❌ Product not found: \(productId)")
+            debugPrint("❌ Product not found: \(productId)")
             throw SubscriptionError.productNotFound
         }
         
-        print("💳 Purchasing: \(product.displayName) - \(product.displayPrice)")
+        debugPrint("💳 Purchasing: \(product.displayName) - \(product.displayPrice)")
         
         let result = try await product.purchase()
         
@@ -114,29 +114,29 @@ class SubscriptionManager: ObservableObject {
         case .success(let verification):
             switch verification {
             case .verified(let transaction):
-                print("✅ Purchase verified!")
+                debugPrint("✅ Purchase verified!")
                 isSubscribed = true
                 await transaction.finish()
                 return true
             case .unverified(_, _):
-                print("❌ Purchase unverified")
+                debugPrint("❌ Purchase unverified")
                 throw SubscriptionError.verificationFailed
             }
         case .userCancelled:
-            print("🚫 Purchase cancelled by user")
+            debugPrint("🚫 Purchase cancelled by user")
             return false
         case .pending:
-            print("⏳ Purchase pending")
+            debugPrint("⏳ Purchase pending")
             return false
         @unknown default:
-            print("❓ Unknown purchase result")
+            debugPrint("❓ Unknown purchase result")
             return false
         }
     }
     
     // MARK: - 購入復元
     func restorePurchases() async throws -> Bool {
-        print("🔄 Restoring purchases...")
+        debugPrint("🔄 Restoring purchases...")
         
         // App Storeと同期
         try await AppStore.sync()

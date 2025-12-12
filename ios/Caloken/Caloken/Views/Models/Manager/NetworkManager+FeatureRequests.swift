@@ -68,7 +68,7 @@ extension NetworkManager {
         
         let endpoint = "\(baseURL)/feature-requests"
         
-        print("📋 Get Feature Requests: \(endpoint)")
+        debugPrint("📋 Get Feature Requests: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -79,7 +79,7 @@ extension NetworkManager {
         
         // 認証トークンを追加
         if let token = UserDefaults.standard.string(forKey: "supabase_access_token") {
-            print("🔑 Token prefix: \(String(token.prefix(50)))...")  // ← 追加
+            debugPrint("🔑 Token prefix: \(String(token.prefix(50)))...")  // ← 追加
 
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -90,7 +90,7 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
@@ -105,7 +105,7 @@ extension NetworkManager {
     func getFeatureRequest(id: String) async throws -> FeatureRequestAPI {
         let endpoint = "\(baseURL)/feature-requests/\(id)"
         
-        print("📋 Get Feature Request: \(endpoint)")
+        debugPrint("📋 Get Feature Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -136,7 +136,7 @@ extension NetworkManager {
     func createFeatureRequest(title: String, description: String) async throws -> FeatureRequestAPI {
         let endpoint = "\(baseURL)/feature-requests"
         
-        print("📋 Create Feature Request: \(endpoint)")
+        debugPrint("📋 Create Feature Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -162,7 +162,7 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
@@ -176,7 +176,7 @@ extension NetworkManager {
     func deleteFeatureRequest(id: String) async throws {
         let endpoint = "\(baseURL)/feature-requests/\(id)"
         
-        print("📋 Delete Feature Request: \(endpoint)")
+        debugPrint("📋 Delete Feature Request: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -204,7 +204,7 @@ extension NetworkManager {
     func toggleFeatureRequestVote(requestId: String) async throws -> VoteResponse {
         let endpoint = "\(baseURL)/feature-requests/\(requestId)/vote"
         
-        print("📋 Toggle Vote: \(endpoint)")
+        debugPrint("📋 Toggle Vote: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -223,7 +223,7 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
@@ -237,7 +237,7 @@ extension NetworkManager {
     func addFeatureRequestComment(requestId: String, content: String) async throws -> FeatureCommentAPI {
         let endpoint = "\(baseURL)/feature-requests/\(requestId)/comments"
         
-        print("📋 Add Comment: \(endpoint)")
+        debugPrint("📋 Add Comment: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL
@@ -260,7 +260,7 @@ extension NetworkManager {
             throw NetworkError.invalidResponse
         }
         
-        print("  - Status: \(httpResponse.statusCode)")
+        debugPrint("  - Status: \(httpResponse.statusCode)")
         
         guard httpResponse.statusCode == 200 else {
             throw NetworkError.serverError(statusCode: httpResponse.statusCode)
@@ -274,7 +274,7 @@ extension NetworkManager {
     func deleteFeatureRequestComment(requestId: String, commentId: String) async throws {
         let endpoint = "\(baseURL)/feature-requests/\(requestId)/comments/\(commentId)"
         
-        print("📋 Delete Comment: \(endpoint)")
+        debugPrint("📋 Delete Comment: \(endpoint)")
         
         guard let url = URL(string: endpoint) else {
             throw NetworkError.invalidURL

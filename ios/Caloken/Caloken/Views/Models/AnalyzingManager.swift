@@ -141,7 +141,7 @@ final class AnalyzingManager: ObservableObject {
                 self.completeMealAnalysisWithAI(id: id, result: result)
             }
         } catch {
-            print("❌ AI Image analysis error: \(error)")
+            debugPrint("❌ AI Image analysis error: \(error)")
             await MainActor.run {
                 let noDesc: String? = nil
                 self.completeMealAnalysis(id: id, fromDescription: noDesc)
@@ -157,7 +157,7 @@ final class AnalyzingManager: ObservableObject {
                 self.completeMealAnalysisWithAI(id: id, result: result)
             }
         } catch {
-            print("❌ AI Text analysis error: \(error)")
+            debugPrint("❌ AI Text analysis error: \(error)")
             await MainActor.run {
                 self.completeMealAnalysis(id: id, fromDescription: description)
             }

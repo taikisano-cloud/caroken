@@ -46,7 +46,7 @@ class WaterLogsManager: ObservableObject {
         }
         
         saveLogs()
-        print("💧 水分量更新: \(amount)ml for \(startOfDay)")
+        debugPrint("💧 水分量更新: \(amount)ml for \(startOfDay)")
     }
     
     // 指定日の水分量を増加（ml）
@@ -92,7 +92,7 @@ class WaterLogsManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
            let decoded = try? JSONDecoder().decode([WaterLogEntry].self, from: data) {
             allLogs = decoded
-            print("📂 水分ログ読み込み: \(allLogs.count)件")
+            debugPrint("📂 水分ログ読み込み: \(allLogs.count)件")
         }
     }
 }

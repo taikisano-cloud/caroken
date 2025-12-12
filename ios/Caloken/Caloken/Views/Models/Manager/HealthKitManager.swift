@@ -167,7 +167,7 @@ class HealthKitManager: ObservableObject {
                 self.todaySteps = steps
             }
         } catch {
-            print("Failed to fetch steps: \(error)")
+            debugPrint("Failed to fetch steps: \(error)")
         }
     }
     
@@ -202,7 +202,7 @@ class HealthKitManager: ObservableObject {
                 self.todayActiveCalories = calories
             }
         } catch {
-            print("Failed to fetch active calories: \(error)")
+            debugPrint("Failed to fetch active calories: \(error)")
         }
     }
     
@@ -241,7 +241,7 @@ class HealthKitManager: ObservableObject {
                 self.latestWeight = weight
             }
         } catch {
-            print("Failed to fetch weight: \(error)")
+            debugPrint("Failed to fetch weight: \(error)")
         }
     }
     
@@ -314,7 +314,7 @@ class HealthKitManager: ObservableObject {
         
         healthStore.enableBackgroundDelivery(for: stepsType, frequency: .hourly) { success, error in
             if let error = error {
-                print("Background delivery error: \(error)")
+                debugPrint("Background delivery error: \(error)")
             }
         }
     }

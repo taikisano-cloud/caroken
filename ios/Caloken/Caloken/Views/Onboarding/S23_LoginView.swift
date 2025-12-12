@@ -110,13 +110,13 @@ struct S23_LoginView: View {
         }
         .onChange(of: authService.isLoggedIn) { _, newValue in
             if newValue {
-                print("✅ Auth state changed: isLoggedIn = true")
+                debugPrint("✅ Auth state changed: isLoggedIn = true")
                 checkSubscriptionAndNavigate()
             }
         }
         .onAppear {
             if authService.isLoggedIn {
-                print("✅ Already logged in, checking subscription...")
+                debugPrint("✅ Already logged in, checking subscription...")
                 checkSubscriptionAndNavigate()
             }
         }
@@ -130,11 +130,11 @@ struct S23_LoginView: View {
             await MainActor.run {
                 if subscriptionManager.isSubscribed {
                     // 課金済み → ホームへ直行
-                    print("✅ User is subscribed, going to home")
+                    debugPrint("✅ User is subscribed, going to home")
                     isLoggedIn = true
                 } else {
                     // 未課金 → Paywallへ
-                    print("⚠️ User is not subscribed, showing paywall")
+                    debugPrint("⚠️ User is not subscribed, showing paywall")
                     navigateToPaywall = true
                 }
             }
@@ -252,7 +252,7 @@ struct S23_LoginView: View {
             } catch AuthError.cancelled {
                 await MainActor.run {
                     isSigningIn = false
-                    print("🚫 Google Sign In was cancelled")
+                    debugPrint("🚫 Google Sign In was cancelled")
                 }
             } catch {
                 await MainActor.run {
@@ -282,7 +282,7 @@ struct S23_LoginView: View {
                 let fullName = appleIDCredential.fullName
                 let email = appleIDCredential.email
                 
-                print("🍎 Apple Sign In - Got ID Token")
+                debugPrint("🍎 Apple Sign In - Got ID Token")
                 
                 Task {
                     do {
@@ -295,7 +295,7 @@ struct S23_LoginView: View {
                         
                         await MainActor.run {
                             isSigningIn = false
-                            print("✅ Apple Sign In with Supabase completed")
+                            debugPrint("✅ Apple Sign In with Supabase completed")
                         }
                     } catch {
                         await MainActor.run {
@@ -308,7 +308,7 @@ struct S23_LoginView: View {
             }
             
         case .failure(let error):
-            print("❌ Apple Sign In Error: \(error.localizedDescription)")
+            debugPrint("❌ Apple Sign In Error: \(error.localizedDescription)")
             
             if let authError = error as? ASAuthorizationError {
                 handleAuthorizationError(authError)
@@ -322,10 +322,10 @@ struct S23_LoginView: View {
     private func handleAuthorizationError(_ authError: ASAuthorizationError) {
         switch authError.code {
         case .canceled:
-            print("   User canceled")
+            debugPrint("   User canceled")
         case .unknown:
             if isDevelopment {
-                print("⚠️ Apple Sign In failed on simulator")
+                debugPrint("⚠️ Apple Sign In failed on simulator")
             }
             errorMessage = "Apple Sign Inでエラーが発生しました。シミュレータでは動作しません。"
             showError = true
@@ -339,7 +339,7 @@ struct S23_LoginView: View {
             errorMessage = "認証に失敗しました。"
             showError = true
         case .notInteractive:
-            print("   Not interactive")
+            debugPrint("   Not interactive")
         case .matchedExcludedCredential:
             errorMessage = "この資格情報は使用できません。"
             showError = true
@@ -411,7 +411,7 @@ struct LoginVideoPlayerView: View {
         // Bundle内のファイルを探す（動画名: onboarding）
         if let bundleURL = Bundle.main.url(forResource: "onboarding", withExtension: "mp4") {
             videoURL = bundleURL
-            print("✅ Login: Video found in Bundle")
+            debugPrint("✅ Login: Video found in Bundle")
         } else if let asset = NSDataAsset(name: "onboarding") {
             // Assets Catalogから取得
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("LoginOnboarding.mp4")
@@ -421,9 +421,9 @@ struct LoginVideoPlayerView: View {
                 }
                 try asset.data.write(to: tempURL)
                 videoURL = tempURL
-                print("✅ Login: Video loaded from Assets")
+                debugPrint("✅ Login: Video loaded from Assets")
             } catch {
-                print("❌ Login: Failed to write video: \(error)")
+                debugPrint("❌ Login: Failed to write video: \(error)")
             }
         }
         

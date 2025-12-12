@@ -331,10 +331,10 @@ struct FinalConfirmationView: View {
     private func deleteAccount() {
         isDeleting = true
         
-        print("🗑️ Starting account deletion...")
-        print("   Reason: \(reason)")
+        debugPrint("🗑️ Starting account deletion...")
+        debugPrint("   Reason: \(reason)")
         if !otherReason.isEmpty {
-            print("   Other reason: \(otherReason)")
+            debugPrint("   Other reason: \(otherReason)")
         }
         
         Task {
@@ -344,7 +344,7 @@ struct FinalConfirmationView: View {
                 
                 await MainActor.run {
                     isDeleting = false
-                    print("✅ Account deleted successfully")
+                    debugPrint("✅ Account deleted successfully")
                     
                     // UserProfileManagerもリセット
                     UserProfileManager.shared.resetAllData()
@@ -357,7 +357,7 @@ struct FinalConfirmationView: View {
                     isDeleting = false
                     errorMessage = "アカウント削除に失敗しました: \(error.localizedDescription)"
                     showError = true
-                    print("❌ Delete account error: \(error)")
+                    debugPrint("❌ Delete account error: \(error)")
                 }
             }
         }

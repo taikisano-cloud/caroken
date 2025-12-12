@@ -274,6 +274,6 @@ final class UserProfileManager: ObservableObject {
         // UserDefaultsからプロフィールデータをクリア
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
         
-        print("🗑️ UserProfileManager: All data reset")
+        debugPrint("🗑️ UserProfileManager: All data reset")
     }
 }

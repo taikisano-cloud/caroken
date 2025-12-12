@@ -128,7 +128,7 @@ class AuthService: NSObject, ObservableObject {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        print("🍎 Apple Sign In - Sending to Supabase...")
+        debugPrint("🍎 Apple Sign In - Sending to Supabase...")
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -138,10 +138,10 @@ class AuthService: NSObject, ObservableObject {
                 throw AuthError.invalidResponse
             }
             
-            print("📡 Response Status: \(httpResponse.statusCode)")
+            debugPrint("📡 Response Status: \(httpResponse.statusCode)")
             
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("📦 Response: \(jsonString.prefix(500))")
+                debugPrint("📦 Response: \(jsonString.prefix(500))")
             }
             
             if httpResponse.statusCode == 200 {
@@ -158,8 +158,8 @@ class AuthService: NSObject, ObservableObject {
                     isLoggedIn = true
                     isLoading = false
                     
-                    print("✅ Apple Sign In Success!")
-                    print("   User ID: \(userId)")
+                    debugPrint("✅ Apple Sign In Success!")
+                    debugPrint("   User ID: \(userId)")
                     
                 } else {
                     isLoading = false
@@ -171,7 +171,7 @@ class AuthService: NSObject, ObservableObject {
                 // エラーメッセージを解析
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let errorMsg = json["error_description"] as? String ?? json["msg"] as? String {
-                    print("❌ Error: \(errorMsg)")
+                    debugPrint("❌ Error: \(errorMsg)")
                     errorMessage = errorMsg
                 }
                 
@@ -179,7 +179,7 @@ class AuthService: NSObject, ObservableObject {
             }
         } catch {
             isLoading = false
-            print("❌ Apple Sign In Error: \(error)")
+            debugPrint("❌ Apple Sign In Error: \(error)")
             throw error
         }
     }
@@ -216,23 +216,23 @@ class AuthService: NSObject, ObservableObject {
                     if let error = error {
                         let nsError = error as NSError
                         if nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
-                            print("🚫 Google Sign In cancelled by user")
+                            debugPrint("🚫 Google Sign In cancelled by user")
                             self.oauthCancelled = true  // キャンセルフラグを設定
                             continuation.resume(throwing: AuthError.cancelled)
                             return
                         }
-                        print("❌ Google Sign In error: \(error)")
+                        debugPrint("❌ Google Sign In error: \(error)")
                         continuation.resume(throwing: AuthError.signInFailed)
                         return
                     }
                     
                     guard let callbackURL = callbackURL else {
-                        print("❌ No callback URL received")
+                        debugPrint("❌ No callback URL received")
                         continuation.resume(throwing: AuthError.invalidResponse)
                         return
                     }
                     
-                    print("📥 Received callback URL")
+                    debugPrint("📥 Received callback URL")
                     await self.processOAuthCallback(url: callbackURL)
                     
                     // ログインに成功したかチェック
@@ -255,7 +255,7 @@ class AuthService: NSObject, ObservableObject {
     func handleOAuthCallback(url: URL) async {
         // キャンセルされた場合はコールバックを無視
         if oauthCancelled {
-            print("⚠️ OAuth was cancelled, ignoring callback")
+            debugPrint("⚠️ OAuth was cancelled, ignoring callback")
             oauthCancelled = false  // リセット
             return
         }
@@ -267,14 +267,14 @@ class AuthService: NSObject, ObservableObject {
     private func processOAuthCallback(url: URL) async {
         isLoading = true
         
-        print("🔐 Processing OAuth callback...")
-        print("   URL: \(url.absoluteString.prefix(100))...")
+        debugPrint("🔐 Processing OAuth callback...")
+        debugPrint("   URL: \(url.absoluteString.prefix(100))...")
         
         var params: [String: String] = [:]
         
         // フラグメントからパラメータを抽出
         if let fragment = URLComponents(url: url, resolvingAgainstBaseURL: false)?.fragment {
-            print("   Fragment found, parsing...")
+            debugPrint("   Fragment found, parsing...")
             fragment.split(separator: "&").forEach { pair in
                 let keyValue = pair.split(separator: "=", maxSplits: 1)
                 if keyValue.count == 2 {
@@ -292,20 +292,20 @@ class AuthService: NSObject, ObservableObject {
             }
         }
         
-        print("   Params found: \(params.keys.sorted().joined(separator: ", "))")
+        debugPrint("   Params found: \(params.keys.sorted().joined(separator: ", "))")
         
         guard let accessToken = params["access_token"],
               let refreshToken = params["refresh_token"] else {
             isLoading = false
             errorMessage = "認証トークンが見つかりません"
-            print("❌ No tokens in callback URL")
-            print("   Available params: \(params.keys.sorted())")
+            debugPrint("❌ No tokens in callback URL")
+            debugPrint("   Available params: \(params.keys.sorted())")
             return
         }
         
-        print("✅ Tokens found in callback")
-        print("   Access Token length: \(accessToken.count)")
-        print("   Refresh Token length: \(refreshToken.count)")
+        debugPrint("✅ Tokens found in callback")
+        debugPrint("   Access Token length: \(accessToken.count)")
+        debugPrint("   Refresh Token length: \(refreshToken.count)")
         
         // トークンを保存
         UserDefaults.standard.set(accessToken, forKey: "supabase_access_token")
@@ -319,9 +319,9 @@ class AuthService: NSObject, ObservableObject {
         // 保存確認
         let savedAccess = UserDefaults.standard.string(forKey: "supabase_access_token")
         let savedRefresh = UserDefaults.standard.string(forKey: "supabase_refresh_token")
-        print("✅ Tokens saved verification:")
-        print("   Access Token saved: \(savedAccess != nil && !savedAccess!.isEmpty)")
-        print("   Refresh Token saved: \(savedRefresh != nil && !savedRefresh!.isEmpty)")
+        debugPrint("✅ Tokens saved verification:")
+        debugPrint("   Access Token saved: \(savedAccess != nil && !savedAccess!.isEmpty)")
+        debugPrint("   Refresh Token saved: \(savedRefresh != nil && !savedRefresh!.isEmpty)")
         
         // ユーザー情報を取得（失敗してもログインは成功とする）
         await fetchUser(accessToken: accessToken)
@@ -332,15 +332,15 @@ class AuthService: NSObject, ObservableObject {
         }
         isLoading = false
         
-        print("✅ OAuth callback processing completed")
-        print("   isLoggedIn: \(isLoggedIn)")
-        print("   isLoading: \(isLoading)")
+        debugPrint("✅ OAuth callback processing completed")
+        debugPrint("   isLoggedIn: \(isLoggedIn)")
+        debugPrint("   isLoading: \(isLoading)")
     }
     
     // MARK: - Fetch User
     @MainActor
     private func fetchUser(accessToken: String) async {
-        print("🔄 Fetching user info...")
+        debugPrint("🔄 Fetching user info...")
         
         guard let url = URL(string: "\(supabaseURL)/auth/v1/user") else {
             isLoading = false
@@ -356,11 +356,11 @@ class AuthService: NSObject, ObservableObject {
             let (data, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
-                print("📡 Fetch User HTTP Status: \(httpResponse.statusCode)")
+                debugPrint("📡 Fetch User HTTP Status: \(httpResponse.statusCode)")
                 
                 // 401エラーの場合でもトークンは保存済みなので、ログイン成功として扱う
                 if httpResponse.statusCode == 401 {
-                    print("⚠️ Token validation failed, but proceeding with login")
+                    debugPrint("⚠️ Token validation failed, but proceeding with login")
                     // トークンは既に保存されているので、ユーザー情報なしでログイン
                     isLoggedIn = true
                     isLoading = false
@@ -380,29 +380,29 @@ class AuthService: NSObject, ObservableObject {
                     isLoggedIn = true
                     isLoading = false
                     
-                    print("✅ User fetch success!")
-                    print("   User ID: \(userId)")
-                    print("   Email: \(email ?? "none")")
+                    debugPrint("✅ User fetch success!")
+                    debugPrint("   User ID: \(userId)")
+                    debugPrint("   Email: \(email ?? "none")")
                     
                     // 最終確認ログ
-                    print("📦 Final token check:")
-                    print("   supabase_access_token: \(UserDefaults.standard.string(forKey: "supabase_access_token") != nil)")
-                    print("   supabase_refresh_token: \(UserDefaults.standard.string(forKey: "supabase_refresh_token") != nil)")
-                    print("   supabase_user_id: \(UserDefaults.standard.string(forKey: "supabase_user_id") != nil)")
+                    debugPrint("📦 Final token check:")
+                    debugPrint("   supabase_access_token: \(UserDefaults.standard.string(forKey: "supabase_access_token") != nil)")
+                    debugPrint("   supabase_refresh_token: \(UserDefaults.standard.string(forKey: "supabase_refresh_token") != nil)")
+                    debugPrint("   supabase_user_id: \(UserDefaults.standard.string(forKey: "supabase_user_id") != nil)")
                 } else {
                     // ユーザーIDが取得できない場合もログイン成功として扱う
-                    print("⚠️ User ID not found in response, but proceeding")
+                    debugPrint("⚠️ User ID not found in response, but proceeding")
                     isLoggedIn = true
                     isLoading = false
                 }
             } else {
                 // JSONパースに失敗した場合もログイン成功として扱う
-                print("⚠️ Failed to parse user response, but proceeding")
+                debugPrint("⚠️ Failed to parse user response, but proceeding")
                 isLoggedIn = true
                 isLoading = false
             }
         } catch {
-            print("❌ User fetch failed: \(error)")
+            debugPrint("❌ User fetch failed: \(error)")
             // エラーでもトークンは保存済みなので、ログイン成功として扱う
             isLoggedIn = true
             isLoading = false
@@ -520,24 +520,24 @@ class AuthService: NSObject, ObservableObject {
         var accessToken = UserDefaults.standard.string(forKey: "supabase_access_token")
         let refreshToken = UserDefaults.standard.string(forKey: "supabase_refresh_token")
         
-        print("🔍 Debug - Access Token exists: \(accessToken != nil)")
-        print("🔍 Debug - Refresh Token exists: \(refreshToken != nil)")
+        debugPrint("🔍 Debug - Access Token exists: \(accessToken != nil)")
+        debugPrint("🔍 Debug - Refresh Token exists: \(refreshToken != nil)")
         
         // アクセストークンがない、または空の場合
         if accessToken == nil || accessToken!.isEmpty {
             // リフレッシュトークンがあれば、トークンを更新してみる
             if let refresh = refreshToken, !refresh.isEmpty {
-                print("🔄 Attempting to refresh token...")
+                debugPrint("🔄 Attempting to refresh token...")
                 do {
                     accessToken = try await refreshAccessToken(refreshToken: refresh)
                 } catch {
                     isLoading = false
-                    print("❌ Token refresh failed: \(error)")
+                    debugPrint("❌ Token refresh failed: \(error)")
                     throw AuthError.unauthorized
                 }
             } else {
                 isLoading = false
-                print("❌ No tokens available")
+                debugPrint("❌ No tokens available")
                 throw AuthError.unauthorized
             }
         }
@@ -573,8 +573,8 @@ class AuthService: NSObject, ObservableObject {
         
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        print("🗑️ Calling delete-account Edge Function...")
-        print("   Reason: \(reason)")
+        debugPrint("🗑️ Calling delete-account Edge Function...")
+        debugPrint("   Reason: \(reason)")
         
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
@@ -584,10 +584,10 @@ class AuthService: NSObject, ObservableObject {
                 throw AuthError.invalidResponse
             }
             
-            print("📡 Delete Account Response: \(httpResponse.statusCode)")
+            debugPrint("📡 Delete Account Response: \(httpResponse.statusCode)")
             
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("📦 Response: \(jsonString)")
+                debugPrint("📦 Response: \(jsonString)")
             }
             
             if httpResponse.statusCode == 200 {
@@ -598,11 +598,11 @@ class AuthService: NSObject, ObservableObject {
                 currentUser = nil
                 isLoading = false
                 
-                print("✅ Account deleted from Supabase successfully")
+                debugPrint("✅ Account deleted from Supabase successfully")
                 
             } else if httpResponse.statusCode == 401 {
                 // トークンが無効 - リフレッシュを試みる
-                print("⚠️ Token invalid, attempting refresh...")
+                debugPrint("⚠️ Token invalid, attempting refresh...")
                 if let refresh = refreshToken, !refresh.isEmpty {
                     do {
                         let _ = try await refreshAccessToken(refreshToken: refresh)
@@ -621,7 +621,7 @@ class AuthService: NSObject, ObservableObject {
                 
             } else if httpResponse.statusCode == 404 {
                 // Edge Function が見つからない場合はログアウトのみ実行
-                print("⚠️ Edge Function not found, performing logout only")
+                debugPrint("⚠️ Edge Function not found, performing logout only")
                 try await fallbackLogout(accessToken: validAccessToken)
                 
             } else {
@@ -630,7 +630,7 @@ class AuthService: NSObject, ObservableObject {
                 
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let errorMsg = json["error"] as? String {
-                    print("❌ Error: \(errorMsg)")
+                    debugPrint("❌ Error: \(errorMsg)")
                     throw AuthError.deleteAccountFailed(errorMsg)
                 }
                 
@@ -642,7 +642,7 @@ class AuthService: NSObject, ObservableObject {
             throw error
         } catch {
             isLoading = false
-            print("❌ Delete account error: \(error)")
+            debugPrint("❌ Delete account error: \(error)")
             throw AuthError.deleteAccountFailed(error.localizedDescription)
         }
     }
@@ -681,7 +681,7 @@ class AuthService: NSObject, ObservableObject {
         UserDefaults.standard.set(newAccessToken, forKey: "accessToken")
         UserDefaults.standard.set(newRefreshToken, forKey: "refreshToken")
         
-        print("✅ Token refreshed successfully")
+        debugPrint("✅ Token refreshed successfully")
         
         return newAccessToken
     }
@@ -709,7 +709,7 @@ class AuthService: NSObject, ObservableObject {
         currentUser = nil
         isLoading = false
         
-        print("✅ Logout completed (Edge Function not available)")
+        debugPrint("✅ Logout completed (Edge Function not available)")
     }
     
     // MARK: - Clear All Local Data
@@ -754,7 +754,7 @@ class AuthService: NSObject, ObservableObject {
         UserDefaults.standard.removeObject(forKey: "userProfile")
         UserDefaults.standard.removeObject(forKey: "userName")
         
-        print("🗑️ All local data cleared")
+        debugPrint("🗑️ All local data cleared")
     }
     
     // MARK: - Helper Methods
